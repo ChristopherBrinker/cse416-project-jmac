@@ -1,0 +1,24 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-lyra",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/styles/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "lucide",
+  "aliases": {
+    "components": "@cse416-project-jmac/ui/components",
+    "utils": "@cse416-project-jmac/ui/lib/utils",
+    "hooks": "@cse416-project-jmac/ui/hooks",
+    "lib": "@cse416-project-jmac/ui/lib",
+    "ui": "@cse416-project-jmac/ui/components"
+  },
+  "menuColor": "default",
+  "menuAccent": "subtle",
+  "registries": {}
+}
