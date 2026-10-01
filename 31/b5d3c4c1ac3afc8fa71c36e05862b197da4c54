@@ -1,0 +1,67 @@
+packages/backend/package.json
+  s_616fad3a9c7188::t_6a8bfc91875cff 4-20
+  s_165fa28d385a13::t_9a4690ce2c95ff 1-3,21-29
+packages/backend/convex/privateData.ts
+  s_616fad3a9c7188::t_6a8bfc91875cff 4-15
+  s_616fad3a9c7188::t_352dba73adf72e 1-3
+  s_616fad3a9c7188::t_fa612b7bb32539 16
+packages/backend/convex/auth.config.ts
+  s_616fad3a9c7188::t_6a8bfc91875cff 4-6
+  s_616fad3a9c7188::t_ad3e6eec25dd44 1-3
+packages/backend/.gitignore
+  s_616fad3a9c7188::t_f576c2ace61dd5 1-2
+packages/backend/convex/tsconfig.json
+  s_616fad3a9c7188::t_723dec730d1071 1-26
+packages/backend/convex/README.md
+  s_89af3f9929eb3d::t_fa5236f83e8c6a 1-87
+packages/backend/convex/auth.ts
+  s_5dd0abad3b7c3b::t_801a0dd62999c8 1-23
+packages/backend/convex/convex.config.ts
+  s_5dd0abad3b7c3b::t_548bc1913522b8 1-6
+packages/backend/convex/healthCheck.ts
+  s_89af3f9929eb3d::t_e54184ff6ab0f1 1-7
+packages/backend/convex/http.ts
+  s_5dd0abad3b7c3b::t_0cdfcc550ccd27 1-7
+packages/backend/convex/schema.ts
+  s_89af3f9929eb3d::t_a0d0ad17dc2ae7 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "31b5d3c4c1ac3afc8fa71c36e05862b197da4c54",
+  "prompts": {},
+  "sessions": {
+    "s_165fa28d385a13": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37459afd-6887-41d5-8b43-aa8442eda1f1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    },
+    "s_5dd0abad3b7c3b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0f4ef-48c8-7b72-a68a-75b12ffe8048",
+        "model": "unknown"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    },
+    "s_616fad3a9c7188": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "40b5eaa0-904d-42a9-96a6-b5abee0113fe",
+        "model": "grok-4.7"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    },
+    "s_89af3f9929eb3d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0f4e6-fa41-7721-8adc-faed64a3958d",
+        "model": "unknown"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    }
+  }
+}
