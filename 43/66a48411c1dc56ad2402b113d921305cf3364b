@@ -1,0 +1,42 @@
+README.md
+  s_c34632bc6f2a70::t_6a272cc6844bdf 5-103
+  s_c34632bc6f2a70::t_07bc9947adcf15 2-4
+  s_c34632bc6f2a70::t_94cc388e17f30f 104-106
+  s_5dd0abad3b7c3b::t_0b3e0c830d1868 1,107-110
+contracts/README.md
+  s_89af3f9929eb3d::t_d9670a6b240521 1-3
+workers/README.md
+  s_89af3f9929eb3d::t_3a7140acc84e2f 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "4366a48411c1dc56ad2402b113d921305cf3364b",
+  "prompts": {},
+  "sessions": {
+    "s_5dd0abad3b7c3b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0f4ef-48c8-7b72-a68a-75b12ffe8048",
+        "model": "unknown"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    },
+    "s_89af3f9929eb3d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0f4e6-fa41-7721-8adc-faed64a3958d",
+        "model": "unknown"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    },
+    "s_c34632bc6f2a70": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "2aa187d2-9920-4e0f-a4f1-8a0a9eaff459",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    }
+  }
+}
