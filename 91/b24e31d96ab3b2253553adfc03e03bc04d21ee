@@ -1,0 +1,139 @@
+packages/ui/src/components/badge.tsx
+  s_c34632bc6f2a70::t_355d0dbe466b0d 1-3,5-51
+  s_c34632bc6f2a70::t_89f0df27c0acc4 4
+  s_c34632bc6f2a70::t_56a42a4b79341f 52
+packages/ui/src/components/tooltip.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-53
+  s_616fad3a9c7188::t_eaad815d772b06 54-56
+  s_89af3f9929eb3d::t_dc55a119214fa7 57-65
+packages/ui/src/components/textarea.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-17
+packages/ui/src/components/sonner.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-45
+  s_616fad3a9c7188::t_2ef3b8f971967f 46
+packages/ui/src/components/table.tsx
+  s_c34632bc6f2a70::t_89f0df27c0acc4 4
+  s_c34632bc6f2a70::t_355d0dbe466b0d 1-3,5-115
+packages/ui/src/components/separator.tsx
+  s_c34632bc6f2a70::t_89f0df27c0acc4 4
+  s_c34632bc6f2a70::t_355d0dbe466b0d 1-3,5-24
+packages/ui/src/components/empty.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-93
+  s_616fad3a9c7188::t_75273f5356a094 94-96
+  s_89af3f9929eb3d::t_2f5c92a123f610 97-104
+packages/ui/src/components/select.tsx
+  s_c34632bc6f2a70::t_6a272cc6844bdf 1,3-6,8,17,27,36,43,51,55,58-93,121-124,133,143,146,158,174,184,187,201
+  s_c34632bc6f2a70::t_355d0dbe466b0d 2,7,9-16,18-26,28-35,37-42,44-50,52-54,56-57,94-120,125-132,134-142,144-145,147-157,159-173,175-183,185-186,188-200
+packages/ui/package.json
+  s_616fad3a9c7188::t_6a8bfc91875cff 12-37
+  s_616fad3a9c7188::t_d09b947bcc855a 9-11
+  s_616fad3a9c7188::t_7fd5670e5f1457 38
+  s_89af3f9929eb3d::t_03a2edcd921321 1-8
+packages/ui/src/components/label.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-19
+packages/ui/src/components/message.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-84
+  s_616fad3a9c7188::t_56cacb89a67528 85-87
+  s_89af3f9929eb3d::t_8d25907dd4b46c 88-91
+packages/ui/src/components/dialog.tsx
+  s_c34632bc6f2a70::t_6629c34c458420 1-4,6-153
+  s_c34632bc6f2a70::t_89f0df27c0acc4 5
+  s_c34632bc6f2a70::t_2460cf0b983825 154-155
+packages/ui/src/components/message-scroller.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-129
+  s_616fad3a9c7188::t_3ed60105682dc0 130-132
+packages/ui/src/components/bubble.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-123
+  s_616fad3a9c7188::t_a9433cee70c8b0 124-126
+  s_89af3f9929eb3d::t_bdca6dbe45ddd3 127-128
+packages/ui/src/components/checkbox.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-27
+packages/ui/src/components/button.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-55
+  s_616fad3a9c7188::t_f4d71f1a97cdc2 56
+packages/ui/src/components/skeleton.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-13
+packages/ui/src/components/progress.tsx
+  s_c34632bc6f2a70::t_78aeeff1c39396 32-52
+  s_c34632bc6f2a70::t_355d0dbe466b0d 2-31,53-81
+  s_165fa28d385a13::t_07b44322ee8cf4 1,82
+packages/ui/src/components/input-group.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-152
+  s_616fad3a9c7188::t_367a39612ef49f 153-155
+  s_89af3f9929eb3d::t_92396846376b69 156-157
+packages/ui/src/components/tabs.tsx
+  s_c34632bc6f2a70::t_89f0df27c0acc4 5
+  s_c34632bc6f2a70::t_355d0dbe466b0d 1-4,6-81
+  s_c34632bc6f2a70::t_335f742afbb01d 82
+packages/ui/src/components/attachment.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-198
+  s_616fad3a9c7188::t_83cb51640c19ff 199-201
+  s_89af3f9929eb3d::t_9a27d896e7a4bc 202-211
+packages/ui/src/components/card.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-84
+  s_616fad3a9c7188::t_937b9616ab9f58 85-87
+  s_89af3f9929eb3d::t_254a0bf684b69d 88-102
+packages/ui/src/styles/globals.css
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-79
+  s_616fad3a9c7188::t_4a15939fee2a83 80-82
+  s_89af3f9929eb3d::t_6a9c1d3306a65a 83-130
+packages/ui/src/components/dropdown-menu.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-254
+  s_616fad3a9c7188::t_fa0bae5ce492a6 255-257
+  s_89af3f9929eb3d::t_caa6a172cfcd2f 258-271
+packages/ui/tsconfig.json
+  s_616fad3a9c7188::t_6a8bfc91875cff 9-10
+  s_616fad3a9c7188::t_11116ef1bffad8 1-8,11-14
+packages/ui/src/components/marker.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-67
+  s_616fad3a9c7188::t_c8aa428f490e19 68-70
+  s_89af3f9929eb3d::t_53c47fe4ccc089 71
+packages/ui/src/components/input.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-19
+packages/ui/components.json
+  s_616fad3a9c7188::t_92d1a66b579169 1-24
+packages/ui/postcss.config.mjs
+  s_616fad3a9c7188::t_5d4daa8761bd5d 1-5
+packages/ui/src/lib/utils.ts
+  s_616fad3a9c7188::t_ab10afa406a2d8 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "91b24e31d96ab3b2253553adfc03e03bc04d21ee",
+  "prompts": {},
+  "sessions": {
+    "s_165fa28d385a13": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37459afd-6887-41d5-8b43-aa8442eda1f1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    },
+    "s_616fad3a9c7188": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "40b5eaa0-904d-42a9-96a6-b5abee0113fe",
+        "model": "grok-4.7"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    },
+    "s_89af3f9929eb3d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0f4e6-fa41-7721-8adc-faed64a3958d",
+        "model": "unknown"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    },
+    "s_c34632bc6f2a70": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "2aa187d2-9920-4e0f-a4f1-8a0a9eaff459",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    }
+  }
+}
