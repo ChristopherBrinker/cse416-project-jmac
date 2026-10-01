@@ -1,0 +1,13 @@
+@import "@cse416-project-jmac/ui/globals.css";
+
+:root {
+  --brand: oklch(0.55 0.23 264);
+}
+
+.dark {
+  --brand: oklch(0.66 0.19 264);
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+}
