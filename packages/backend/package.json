@@ -1,0 +1,29 @@
+{
+  "name": "@cse416-project-jmac/backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "exports": {
+    "./convex/_generated/api": "./convex/_generated/api.js"
+  },
+  "scripts": {
+    "dev": "convex dev",
+    "dev:setup": "convex dev --configure --until-success",
+    "lint": "oxlint .",
+    "check-types": "tsc --noEmit -p convex/tsconfig.json",
+    "codegen": "convex codegen"
+  },
+  "dependencies": {
+    "@convex-dev/better-auth": "^0.12.5",
+    "better-auth": "1.6.15",
+    "convex": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cse416-project-jmac/config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

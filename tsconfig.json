@@ -1,0 +1,6 @@
+{
+  "extends": "@cse416-project-jmac/config/tsconfig.base.json",
+  "compilerOptions": {
+    "strictNullChecks": true
+  }
+}

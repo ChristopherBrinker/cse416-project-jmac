@@ -1,0 +1,40 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 7346",
+    "build": "next build",
+    "check-types": "tsc --noEmit",
+    "start": "next start --port 7346",
+    "env:generate": "varlock codegen",
+    "lint": "oxlint ."
+  },
+  "dependencies": {
+    "@convex-dev/better-auth": "^0.12.5",
+    "@cse416-project-jmac/backend": "workspace:*",
+    "@cse416-project-jmac/ui": "workspace:*",
+    "@swc/helpers": "^0.5.23",
+    "@varlock/nextjs-integration": "1.2.2",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "better-auth": "1.6.15",
+    "convex": "catalog:",
+    "lucide-react": "catalog:",
+    "next": "^16.3.4",
+    "next-themes": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "sonner": "catalog:",
+    "varlock": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cse416-project-jmac/config": "workspace:*",
+    "@tailwindcss/postcss": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:"
+  }
+}
