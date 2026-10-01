@@ -1,0 +1,134 @@
+apps/web/src/app/dashboard/page.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 4
+  s_c34632bc6f2a70::t_ec3b743cb870d7 1-3,5-11
+apps/web/src/components/brand-logo.tsx
+  s_c34632bc6f2a70::t_60a9545e504ff7 1-51
+apps/web/package.json
+  s_616fad3a9c7188::t_6a8bfc91875cff 13-38
+  s_616fad3a9c7188::t_a783f038b946f4 10-12
+  s_616fad3a9c7188::t_c842e56a7641ac 39-40
+  s_5dd0abad3b7c3b::t_ab0bb0993acd4d 1-9
+apps/web/tsconfig.json
+  s_616fad3a9c7188::t_6a8bfc91875cff 34
+  s_616fad3a9c7188::t_f653a17ae185f8 1-33,35
+apps/web/src/app/page.tsx
+  s_c34632bc6f2a70::t_2c1eb5522f77c9 1-22,29-32
+  s_c34632bc6f2a70::t_a3429fe1adbdbb 23-28
+  s_165fa28d385a13::t_bc0c376306b76f 33-38
+apps/web/src/index.css
+  s_616fad3a9c7188::t_6a8bfc91875cff 1
+  s_c34632bc6f2a70::t_5703280c74be8a 2-13
+apps/web/src/components/providers.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 4-14
+  s_616fad3a9c7188::t_1ebee3e21edc88 1-3
+  s_616fad3a9c7188::t_5d66fb214fea5f 15-17
+  s_5dd0abad3b7c3b::t_8746ef4334e824 18-28
+apps/web/src/app/layout.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 2-7,30-35,37-43
+  s_c34632bc6f2a70::t_cc6f8b53168a2f 20-22
+  s_c34632bc6f2a70::t_6d8c799c21ec79 36
+  s_616fad3a9c7188::t_42dfa133d36504 1
+  s_616fad3a9c7188::t_84ea230edf86f2 44
+  s_5dd0abad3b7c3b::t_c74ad50d765ec9 8-19,23-29
+apps/web/src/components/header.tsx
+  s_c34632bc6f2a70::t_1ae05a95c68ef2 23,27-28
+  s_c34632bc6f2a70::t_152952c0052e1d 2-4,8-13,22,24-26,29-35,38-52
+  s_c34632bc6f2a70::t_fd1291a8ed3f26 16-17
+  s_c34632bc6f2a70::t_66ea9906eb1616 37
+  s_616fad3a9c7188::t_6a8bfc91875cff 5
+  s_c34632bc6f2a70::t_c292c24fe098db 1
+  s_c34632bc6f2a70::t_9f157412729f1a 14-15
+  s_c34632bc6f2a70::t_75c2ee0d8db9e5 18-21
+  s_c34632bc6f2a70::t_71fd73236f04f8 36
+  s_c34632bc6f2a70::t_dd7c721565f387 53-54
+apps/web/public/private-ai-benchmarking-icon.svg
+  s_c34632bc6f2a70::t_94e9fc343bf70d 2
+  s_c34632bc6f2a70::t_7d6e89efc5b174 1
+  s_c34632bc6f2a70::t_19015940891b6b 3-5
+apps/web/src/components/mode-toggle.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-30
+  s_616fad3a9c7188::t_35739bf440978e 31-33
+  s_89af3f9929eb3d::t_587a4a9ae4ff47 34-37
+apps/web/src/components/theme-provider.tsx
+  s_616fad3a9c7188::t_6a8bfc91875cff 1-10
+  s_616fad3a9c7188::t_f81bb5df57f91c 11
+apps/web/next.config.ts
+  s_616fad3a9c7188::t_6a8bfc91875cff 6-7
+  s_616fad3a9c7188::t_5dce7a093d0ea7 3-5
+  s_616fad3a9c7188::t_7ca06679ca24fc 8-10
+  s_89af3f9929eb3d::t_d37680697896a2 1-2,11
+apps/web/bunfig.toml
+  s_616fad3a9c7188::t_c7782dff526eed 1
+apps/web/components.json
+  s_616fad3a9c7188::t_acbd70c37c7ea3 1-24
+apps/web/postcss.config.mjs
+  s_616fad3a9c7188::t_97f8f4808d934d 1-5
+apps/web/src/components/loader.tsx
+  s_616fad3a9c7188::t_8590935024f764 1-9
+apps/web/.env.example
+  s_5dd0abad3b7c3b::t_4b34a35d670b15 1-3
+apps/web/.env.schema
+  s_5dd0abad3b7c3b::t_2be80ac13bdefb 1-14
+apps/web/src/app/api/auth/[...all]/route.ts
+  s_5dd0abad3b7c3b::t_026ec620b9af8c 1-3
+apps/web/src/app/sign-in/page.tsx
+  s_5dd0abad3b7c3b::t_fc21f3dfb7ab88 1-5
+apps/web/src/app/sign-up/page.tsx
+  s_5dd0abad3b7c3b::t_3971d9dec0d5c9 1-5
+apps/web/src/components/auth-form.tsx
+  s_5dd0abad3b7c3b::t_9ec633d726b6b8 1-95
+apps/web/src/components/user-menu.tsx
+  s_5dd0abad3b7c3b::t_d1d31eb4515c58 1-56
+apps/web/src/lib/auth-client.ts
+  s_5dd0abad3b7c3b::t_f09259c6fd5005 1-4
+apps/web/src/lib/auth-server.ts
+  s_5dd0abad3b7c3b::t_7d19d87a041409 1-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "b8f7d6faca8fa0e2a2c38bcbc4917dc2f1247a40",
+  "prompts": {},
+  "sessions": {
+    "s_165fa28d385a13": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37459afd-6887-41d5-8b43-aa8442eda1f1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    },
+    "s_5dd0abad3b7c3b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0f4ef-48c8-7b72-a68a-75b12ffe8048",
+        "model": "unknown"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    },
+    "s_616fad3a9c7188": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "40b5eaa0-904d-42a9-96a6-b5abee0113fe",
+        "model": "grok-4.7"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    },
+    "s_89af3f9929eb3d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a0f4e6-fa41-7721-8adc-faed64a3958d",
+        "model": "unknown"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    },
+    "s_c34632bc6f2a70": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "2aa187d2-9920-4e0f-a4f1-8a0a9eaff459",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Algoltea <129240273+Algoltea@users.noreply.github.com>"
+    }
+  }
+}
