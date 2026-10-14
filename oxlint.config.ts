@@ -32,5 +32,12 @@ export default defineConfig({
     "func-style": "off",
     "react/function-component-definition": "off",
     "sort-keys": "off",
+    complexity: ["warn", { max: 20 }],
+    "no-plusplus": "off",
+    "require-await": "off",
+    "prefer-destructuring": "off",
+    "unicorn/prefer-response-static-json": "off",
+    "no-explicit-any": "warn",
+    "no-non-null-assertion": "warn",
   },
 });
