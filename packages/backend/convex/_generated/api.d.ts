@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as benchmark from "../benchmark.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as privateData from "../privateData.js";
@@ -21,6 +22,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  benchmark: typeof benchmark;
   healthCheck: typeof healthCheck;
   http: typeof http;
   privateData: typeof privateData;
