@@ -63,7 +63,7 @@ const validateBenchmark = (
 
       for (let j = 0; j < choices.length; j++) {
         const choice = choices[j];
-        if (typeof choice !== "string" || item.prompt.length === 0) {
+        if (typeof choice !== "string" || choice.length === 0) {
           return {
             success: false,
             msg: `items[${i}].choices[${j}] must be a non-empty string`,
@@ -133,6 +133,7 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
   }
 
   const ownerId = user.subject;
+  // name is required by betterauth, so always defined
   const ownerName = user.name!;
   const name = String(benchmark.name);
   const description = String(benchmark.description);
@@ -198,7 +199,7 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
 
 export const createBenchmarkEntry = internalMutation({
   args: {
-    storageId: v.string(),
+    storageId: v.id("_storage"),
     ownerId: v.string(),
     ownerName: v.string(),
     name: v.string(),
@@ -234,6 +235,7 @@ export const getBenchmarks = query({
     version: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    // any unavoidable here - intermediate queries have different types
     let quer: any = ctx.db.query("benchmarks");
     if (args.name) {
       quer = quer.withSearchIndex("search_name", (q: any) =>
@@ -241,14 +243,12 @@ export const getBenchmarks = query({
       );
     }
     if (args.ownerName) {
-      quer = quer.withIndex("by_ownerName", (q: any) =>
-        q.eq("ownerName", args.ownerName)
+      quer = quer.filter((q: any) =>
+        q.eq(q.field("ownerName"), args.ownerName)
       );
     }
     if (args.version) {
-      quer = quer.withIndex("by_version", (q: any) =>
-        q.eq("version", args.version)
-      );
+      quer = quer.filter((q: any) => q.eq(q.field("version"), args.version));
     }
 
     const benchmarks = await quer.take(20);

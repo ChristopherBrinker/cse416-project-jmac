@@ -78,6 +78,7 @@ export default function DevSandbox() {
               name="fileupload"
               accept="application/json, .json"
               style={{ backgroundColor: "ButtonFace" }}
+              required
             />
           </div>
           <div>

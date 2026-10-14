@@ -37,7 +37,7 @@ export default defineConfig({
     "require-await": "off",
     "prefer-destructuring": "off",
     "unicorn/prefer-response-static-json": "off",
-    "no-explicit-any": "warn",
-    "no-non-null-assertion": "warn",
+    "typescript/no-explicit-any": "warn",
+    "typescript/no-non-null-assertion": "warn",
   },
 });

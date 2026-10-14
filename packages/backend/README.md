@@ -17,7 +17,7 @@ This contains information useful for interacting with the convex backend
   - `name : string | undefined`
   - `ownerName : string | undefined`
   - `version : string | undefined`
-- Returns metadata for benchmarks using name, owner name, and version as optional filters. Each record has the following properties:
+- Returns up to 20 metadata records for benchmarks using name, owner name, and version as optional filters. Each record has the following properties:
   - `_id : string`
   - `ownerName : string`
   - `name : string`
@@ -29,7 +29,7 @@ This contains information useful for interacting with the convex backend
 
 ### Note
 
-HTTP Actions require authentication. Make sure to set `Authorization: Bearer [token]` in the headers, where `[token]` is the user token obtained from `(await authClient.convex.token()).data.token`
+HTTP Actions (besides OPTIONS) require authentication. Make sure to set `Authorization: Bearer [token]` in the headers, where `[token]` is the user token obtained from `(await authClient.convex.token()).data.token`
 
 `POST /benchmark/upload`
 
@@ -47,13 +47,13 @@ A benchmark is a JSON file consisting of a single object. The properties of this
 - `schema_version` - currently, must always have the value `"1.0.0"`. Meant to represent the version of the benchmark format
 - `name` - `string` representing the name of the benchmark, visible to general users. Must be non-empty
 - `description` - `string` description of the benchmark, visible to general users. May be empty but not `null`
-- `version` - `string` used to distinguish among one's benchmarks with the same name, visible to general users. Must be non-empty. There is currently no enforced format for this field
+- `version` - `string` used to distinguish among one's benchmarks with the same name, visible to general users. May be empty. There is currently no enforced format for this field
 - `items` - a non-empty array of benchmark items. NOT visible to anyone but the owner and currently-relevant providers. Each item has the following properties:
   - `item_id` - `string` identifying the item. Must be non-empty. Currently no enforced format
-  - `prompt` - `string` prompt for the given item
+  - `prompt` - `string` prompt for the given item. Must be non-empty
   - `choices` - non-empty array of non-empty `string`s
   - `correct_choice` - integer representing the correct answer in `choices`. Must be a valid array index (between 0 and choices.length-1, inclusive)
 
 ## Quick Testing from Client
 
-The `/dev-sandbox` path on the client (component in `src/app/components/dev-sandbox.tsx`) is designed to be a quick, minimal way to test client-convex interaction. Feel free to edit it
+The `/dev-sandbox` path on the client (component in `apps/web/src/app/components/dev-sandbox.tsx`) is designed to be a quick, minimal way to test client-convex interaction. Feel free to edit it

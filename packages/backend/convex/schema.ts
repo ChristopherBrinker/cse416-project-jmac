@@ -3,7 +3,7 @@ import { v } from "convex/values";
 
 export default defineSchema({
   benchmarks: defineTable({
-    storageId: v.string(),
+    storageId: v.id("_storage"),
     ownerId: v.string(),
     ownerName: v.string(),
     name: v.string(),
@@ -12,8 +12,6 @@ export default defineSchema({
     contentHash: v.string(),
   })
     .index("by_ownerId_name_version", ["ownerId", "name", "version"])
-    .index("by_ownerName", ["ownerName"])
-    .index("by_version", ["version"])
     .searchIndex("search_name", {
       searchField: "name",
       filterFields: ["ownerId", "version"],
