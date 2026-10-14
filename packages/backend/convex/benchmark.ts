@@ -21,7 +21,7 @@ const validateBenchmark = (
     }
 
     const items = benchmark.items;
-    if (!items || !(items.length > 0)) {
+    if (!Array.isArray(items) || items.length === 0) {
       return { success: false, msg: "items must be a non-empty array" };
     }
 
@@ -41,7 +41,7 @@ const validateBenchmark = (
       }
 
       const choices = item.choices;
-      if (!choices || !(choices.length > 0)) {
+      if (!Array.isArray(choices) || choices.length === 0) {
         return {
           success: false,
           msg: `items[${i}].choices must be a non-empty array`,
@@ -90,6 +90,7 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
       status: 401,
       headers: new Headers({
         "Access-Control-Allow-Origin": siteUrl,
+        "Content-Type": "application/json",
         Vary: "origin",
       }),
     });
@@ -103,6 +104,7 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
       status: 400,
       headers: new Headers({
         "Access-Control-Allow-Origin": siteUrl,
+        "Content-Type": "application/json",
         Vary: "origin",
       }),
     });
@@ -116,6 +118,7 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
       status: 400,
       headers: new Headers({
         "Access-Control-Allow-Origin": siteUrl,
+        "Content-Type": "application/json",
         Vary: "origin",
       }),
     });
@@ -127,6 +130,7 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
       status: 400,
       headers: new Headers({
         "Access-Control-Allow-Origin": siteUrl,
+        "Content-Type": "application/json",
         Vary: "origin",
       }),
     });
@@ -166,6 +170,7 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
       status: 200,
       headers: new Headers({
         "Access-Control-Allow-Origin": siteUrl,
+        "Content-Type": "application/json",
         Vary: "origin",
       }),
     });
@@ -191,6 +196,7 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
       status,
       headers: new Headers({
         "Access-Control-Allow-Origin": siteUrl,
+        "Content-Type": "application/json",
         Vary: "origin",
       }),
     });
