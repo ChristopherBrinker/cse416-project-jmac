@@ -5,11 +5,15 @@ This contains information useful for interacting with the convex backend
 ## Table of Contents
 
 - [Public Functions](#public-functions)
+  - [benchmark](#benchmark)
+  - [model](#model)
 - [HTTP Endpoints](#http-endpoints)
 - [Benchmark File Format](#benchmark-file-format)
 - [Quick Testing from Client](#quick-testing-from-client)
 
 ## Public Functions
+
+### benchmark
 
 `getBenchmarks`
 
@@ -18,21 +22,33 @@ This contains information useful for interacting with the convex backend
   - `ownerName : string | undefined`
   - `version : string | undefined`
 - Returns up to 20 metadata records for benchmarks using name, owner name, and version as optional filters. Each record has the following properties:
-  - `_id : string`
+  - `_id : Id<"benchmarks">`
   - `ownerName : string`
   - `name : string`
   - `description : string`
   - `version : string`
   - `contentHash : string`
 
+### model
+
+`getModels`
+
+- `args`:
+  - `name : string | undefined`
+- Returns up to 20 records for models using name as an optional search filter. Each record has the following properties:
+  - `_id : Id<"models">`
+  - `_creationTime: number`
+  - `name : string`
+
 ## HTTP Endpoints
 
 ### Note
 
-HTTP Actions (besides OPTIONS) require authentication. Make sure to set `Authorization: Bearer [token]` in the headers, where `[token]` is the user token obtained from `(await authClient.convex.token()).data.token`
+For HTTP actions that require authentication, make sure to set `Authorization: Bearer [token]` in the headers, where `[token]` is the user token obtained from `(await authClient.convex.token()).data.token`
 
 `POST /benchmark/upload`
 
+- Requires authentication
 - Expects a file as its body
 - Checks that the given file is in valid benchmark format. If so, uploads the file, creates a `benchmarks` entry, and returns a JSON object with `benchmarkId` representing the _id of the new `benchmarks` entry
 - On failure, returns a JSON object with an `error` property detailing the cause of the error
