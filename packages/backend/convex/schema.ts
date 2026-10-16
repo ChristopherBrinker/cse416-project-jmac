@@ -17,4 +17,10 @@ export default defineSchema({
       filterFields: ["ownerId", "version"],
       staged: false,
     }),
+  models: defineTable({
+    name: v.string(),
+  }).searchIndex("search_name", {
+    searchField: "name",
+    staged: false,
+  }),
 });

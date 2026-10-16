@@ -43,10 +43,16 @@ export default function DevSandbox() {
   const [searchOwnerName, setSearchOwnerName] = useState<string | undefined>();
   const [searchVersion, setSearchVersion] = useState<string | undefined>();
 
+  const [searchModelName, setSearchModelName] = useState<string | undefined>();
+
   const benchmarks = useQuery(api.benchmark.getBenchmarks, {
     name: searchBenchmarkName,
     ownerName: searchOwnerName,
     version: searchVersion,
+  });
+
+  const models = useQuery(api.model.getModels, {
+    name: searchModelName,
   });
 
   const handleSearch = (formData: FormData) => {
@@ -62,6 +68,13 @@ export default function DevSandbox() {
     setSearchBenchmarkName(name);
     setSearchOwnerName(ownerName);
     setSearchVersion(version);
+  };
+
+  const handleModelSearch = (formData: FormData) => {
+    const name = formData.get("modelName")
+      ? String(formData.get("modelName"))
+      : undefined;
+    setSearchModelName(name);
   };
 
   return (
@@ -123,13 +136,40 @@ export default function DevSandbox() {
       </div>
       <div>
         {benchmarks?.map((m) => (
-          <div key={m._id}>
-            <div>{m._id}</div>
+          <div key={m._id} style={{ marginBottom: "8px" }}>
+            <div>Id: {m._id}</div>
             <div>
               {m.name}, version {m.version} by {m.ownerName}
             </div>
             <div>Description: {m.description}</div>
             <div>Hash: {m.contentHash}</div>
+          </div>
+        ))}
+      </div>
+      <div>
+        Search models
+        <form action={handleModelSearch}>
+          <div>
+            <input
+              type="text"
+              id="modelName"
+              name="modelName"
+              placeholder="Model name"
+              style={{ border: "1px solid black" }}
+            />
+          </div>
+          <div>
+            <button style={{ backgroundColor: "ButtonFace" }} type="submit">
+              Send
+            </button>
+          </div>
+        </form>
+      </div>
+      <div>
+        {models?.map((m) => (
+          <div key={m._id} style={{ marginBottom: "8px" }}>
+            <div>Id: {m._id}</div>
+            <div>Name: {m.name}</div>
           </div>
         ))}
       </div>
