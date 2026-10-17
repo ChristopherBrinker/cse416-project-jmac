@@ -39,5 +39,6 @@ export default defineConfig({
     "unicorn/prefer-response-static-json": "off",
     "typescript/no-explicit-any": "warn",
     "typescript/no-non-null-assertion": "warn",
+    "no-alert": "off",
   },
 });

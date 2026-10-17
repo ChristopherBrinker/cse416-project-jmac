@@ -1,7 +1,8 @@
 "use client";
 
 import { api } from "@cse416-project-jmac/backend/convex/_generated/api";
-import { useQuery } from "convex/react";
+import type { Id } from "@cse416-project-jmac/backend/convex/_generated/dataModel";
+import { useQuery, useMutation } from "convex/react";
 import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
@@ -32,7 +33,14 @@ const handleSubmit = async (formData: FormData) => {
       },
       body: file,
     });
-    console.log(result);
+
+    const body = await result.json();
+    console.log(body);
+    if (result.status === 200) {
+      alert(body.benchmarkId);
+    } else {
+      alert(body.error);
+    }
   }
 };
 
@@ -42,20 +50,24 @@ export default function DevSandbox() {
   >();
   const [searchOwnerName, setSearchOwnerName] = useState<string | undefined>();
   const [searchVersion, setSearchVersion] = useState<string | undefined>();
-
-  const [searchModelName, setSearchModelName] = useState<string | undefined>();
-
   const benchmarks = useQuery(api.benchmark.getBenchmarks, {
     name: searchBenchmarkName,
     ownerName: searchOwnerName,
     version: searchVersion,
   });
 
+  const [searchModelName, setSearchModelName] = useState<string | undefined>();
   const models = useQuery(api.model.getModels, {
     name: searchModelName,
   });
 
-  const handleSearch = (formData: FormData) => {
+  const createJob = useMutation(api.job.createJob);
+  const jobs = useQuery(api.job.getUserJobs);
+
+  const registerProvider = useMutation(api.provider.register);
+  const providers = useQuery(api.provider.getUserProviders);
+
+  const handleBenchmarkSearch = (formData: FormData) => {
     const name = formData.get("benchmarkName")
       ? String(formData.get("benchmarkName"))
       : undefined;
@@ -77,10 +89,38 @@ export default function DevSandbox() {
     setSearchModelName(name);
   };
 
+  const handleCreateJob = async (formData: FormData) => {
+    try {
+      const benchmarkId = formData.get("benchmarkId") as Id<"benchmarks">;
+      const modelId = formData.get("modelId") as Id<"models">;
+      const ret = await createJob({ benchmarkId, modelId });
+      console.log(ret);
+      if (!ret.success) {
+        alert(ret.error);
+      }
+    } catch (error) {
+      console.log(error);
+      alert(error);
+    }
+  };
+
+  const handleRegister = async (formData: FormData) => {
+    try {
+      const providerAddress = String(formData.get("providerAddress"));
+      const ret = await registerProvider({ walletAddress: providerAddress });
+      console.log(ret);
+      if (!ret.success) {
+        alert(ret.error);
+      }
+    } catch (error) {
+      console.log(error);
+      alert(error);
+    }
+  };
+
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
-      <div>Hello World!</div>
-      <div>
+      <div id="benchmark-upload">
         Benchmark upload
         <form action={handleSubmit}>
           <div>
@@ -101,78 +141,163 @@ export default function DevSandbox() {
           </div>
         </form>
       </div>
-      <div>
-        Search benchmarks
-        <form action={handleSearch}>
-          <div>
-            <input
-              type="text"
-              id="benchmarkName"
-              name="benchmarkName"
-              placeholder="Benchmark name"
-              style={{ border: "1px solid black" }}
-            />
-            <input
-              type="text"
-              id="ownerName"
-              name="ownerName"
-              placeholder="Owner name"
-              style={{ border: "1px solid black" }}
-            />
-            <input
-              type="text"
-              id="version"
-              name="version"
-              placeholder="Benchmark version"
-              style={{ border: "1px solid black" }}
-            />
-          </div>
-          <div>
-            <button style={{ backgroundColor: "ButtonFace" }} type="submit">
-              Send
-            </button>
-          </div>
-        </form>
-      </div>
-      <div>
-        {benchmarks?.map((m) => (
-          <div key={m._id} style={{ marginBottom: "8px" }}>
-            <div>Id: {m._id}</div>
+      <div id="benchmark-search">
+        <div>
+          Search benchmarks
+          <form action={handleBenchmarkSearch}>
             <div>
-              {m.name}, version {m.version} by {m.ownerName}
+              <input
+                type="text"
+                id="benchmarkName"
+                name="benchmarkName"
+                placeholder="Benchmark name"
+                style={{ border: "1px solid black" }}
+              />
+              <input
+                type="text"
+                id="ownerName"
+                name="ownerName"
+                placeholder="Owner name"
+                style={{ border: "1px solid black" }}
+              />
+              <input
+                type="text"
+                id="version"
+                name="version"
+                placeholder="Benchmark version"
+                style={{ border: "1px solid black" }}
+              />
             </div>
-            <div>Description: {m.description}</div>
-            <div>Hash: {m.contentHash}</div>
-          </div>
-        ))}
+            <div>
+              <button style={{ backgroundColor: "ButtonFace" }} type="submit">
+                Search
+              </button>
+            </div>
+          </form>
+        </div>
+        <div>
+          {benchmarks?.map((m) => (
+            <div key={m._id} style={{ marginBottom: "8px" }}>
+              <div>Id: {m._id}</div>
+              <div>
+                {m.name}, version {m.version} by {m.ownerName}
+              </div>
+              <div>Description: {m.description}</div>
+              <div>Hash: {m.contentHash}</div>
+            </div>
+          ))}
+        </div>
       </div>
-      <div>
-        Search models
-        <form action={handleModelSearch}>
-          <div>
-            <input
-              type="text"
-              id="modelName"
-              name="modelName"
-              placeholder="Model name"
-              style={{ border: "1px solid black" }}
-            />
-          </div>
-          <div>
-            <button style={{ backgroundColor: "ButtonFace" }} type="submit">
-              Send
-            </button>
-          </div>
-        </form>
+      <div id="model-search">
+        <div>
+          Search models
+          <form action={handleModelSearch}>
+            <div>
+              <input
+                type="text"
+                id="modelName"
+                name="modelName"
+                placeholder="Model name"
+                style={{ border: "1px solid black" }}
+              />
+            </div>
+            <div>
+              <button style={{ backgroundColor: "ButtonFace" }} type="submit">
+                Search
+              </button>
+            </div>
+          </form>
+        </div>
+        <div>
+          {models?.map((m) => (
+            <div key={m._id} style={{ marginBottom: "8px" }}>
+              <div>Id: {m._id}</div>
+              <div>Name: {m.name}</div>
+            </div>
+          ))}
+        </div>
       </div>
-      <div>
-        {models?.map((m) => (
-          <div key={m._id} style={{ marginBottom: "8px" }}>
-            <div>Id: {m._id}</div>
-            <div>Name: {m.name}</div>
-          </div>
-        ))}
+      <div id="job-stuff">
+        <div>
+          Create evaluation job (note the actual ui should have users select
+          from searches, not type the ids)
+          <form action={handleCreateJob}>
+            <div>
+              <input
+                type="text"
+                id="benchmarkId"
+                name="benchmarkId"
+                placeholder="Benchmark ID"
+                style={{ border: "1px solid black" }}
+              />
+              <input
+                type="text"
+                id="modelId"
+                name="modelId"
+                placeholder="Model ID"
+                style={{ border: "1px solid black" }}
+              />
+            </div>
+            <div>
+              <button style={{ backgroundColor: "ButtonFace" }} type="submit">
+                Create
+              </button>
+            </div>
+          </form>
+        </div>
+        <div>
+          Current jobs:
+          {jobs?.map((j) => (
+            <div key={j._id} style={{ marginBottom: "8px" }}>
+              <div>Id: {j._id}</div>
+              <div>Benchmark Id: {j.benchmarkId}</div>
+              <div>Model Id: {j.modelId}</div>
+              <div>Price: {j.price}</div>
+              <div>Status: {j.status}</div>
+            </div>
+          ))}
+        </div>
       </div>
+      <div id="provider-stuff">
+        <div>
+          Register Provider (wallet is 0x followed by 20 hex bytes, example
+          0x00112233445566778899aabbccddeeff00112233)
+          <form action={handleRegister}>
+            <div>
+              <input
+                type="text"
+                id="providerAddress"
+                name="providerAddress"
+                placeholder="Provider Wallet Address"
+                style={{ border: "1px solid black" }}
+              />
+            </div>
+            <div>
+              <button style={{ backgroundColor: "ButtonFace" }} type="submit">
+                Register
+              </button>
+            </div>
+          </form>
+        </div>
+        <div>
+          Current providers:
+          {providers?.map((p) => (
+            <div key={p._id} style={{ marginBottom: "8px" }}>
+              <div>Id: {p._id}</div>
+              <div>
+                Secret: {p.secret} (in actual ui, should be hidden with toggle
+                visibility)
+              </div>
+              <div>Wallet Address: {p.walletAddress}</div>
+              <div>Approved: {String(p.approved)}</div>
+              <div>Max Jobs: {p.maxJobs}</div>
+              <div>Current Jobs: {p.currentJobs}</div>
+              <div>Status: {p.status}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ marginBottom: "32px" }} />
     </main>
   );
 }
