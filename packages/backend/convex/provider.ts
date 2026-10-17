@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { query, mutation } from "./_generated/server";
@@ -36,15 +37,15 @@ export const register = mutation({
 
     const existing = await ctx.db
       .query("providers")
-      .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
-      .collect();
-    for (const p of existing) {
-      if (!p.approved) {
-        return {
-          success: false,
-          error: "Cannot make more providers until existing ones are approved",
-        };
-      }
+      .withIndex("by_userId_approved", (q) =>
+        q.eq("userId", identity.subject).eq("approved", false)
+      )
+      .first();
+    if (existing) {
+      return {
+        success: false,
+        error: "Cannot make more providers until existing ones are approved",
+      };
     }
 
     const secret = generateSecret();
@@ -63,18 +64,22 @@ export const register = mutation({
 });
 
 export const getUserProviders = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (identity === null) {
-      return [];
+      return {
+        page: [],
+        isDone: true,
+        continueCursor: "",
+      };
     }
 
     const providers = await ctx.db
       .query("providers")
-      .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
+      .withIndex("by_userId_approved", (q) => q.eq("userId", identity.subject))
       .order("desc")
-      .collect();
+      .paginate(args.paginationOpts);
     return providers;
   },
 });

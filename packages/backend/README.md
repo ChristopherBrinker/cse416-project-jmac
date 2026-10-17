@@ -53,7 +53,7 @@ This contains information useful for interacting with the convex backend
     - `success : boolean` - whether the job was succesfully created
     - `error : string | undefined` - only defined on failure, detailing the cause
     - `jobId : string | undefined` - only defined on success. The id of the created job
-    - `price : BigInt | undefined` - only defined on success. The calculated price, in Wei, of the created job
+    - `price : bigInt | undefined` - only defined on success. The calculated price, in Wei, of the created job
 
 - `getUserJobs` : query
   - `args`: none
@@ -68,7 +68,7 @@ This contains information useful for interacting with the convex backend
     - Since there is no assignment process yet, approval and state (maxJobs, currentJobs, status) don't currently mean anything
     - Backend verifies wallet address format but not ownership (this should be fine, as using someone else's address would bar a provider from sending results for jobs, with no benefit)
   - Returns an object with the following properties:
-    - `success : boolean` - whether the provider was succesfully registered
+    - `success : boolean` - whether the provider was successfully registered
     - `error : string | undefined` - only defined on failure, detailing the cause
     - `providerId : string | undefined` - only defined on success. The id of the created provider record
     - `secret : string | undefined` - only defined on success. The backend-generated secret for this provider

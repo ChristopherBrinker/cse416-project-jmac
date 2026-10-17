@@ -2,7 +2,7 @@
 
 import { api } from "@cse416-project-jmac/backend/convex/_generated/api";
 import type { Id } from "@cse416-project-jmac/backend/convex/_generated/dataModel";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, usePaginatedQuery } from "convex/react";
 import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
@@ -20,27 +20,31 @@ const handleSubmit = async (formData: FormData) => {
     return;
   }
 
-  const file = formData.get("fileupload") as File;
-  if (file.size > 0) {
-    const postUrl = new URL(
-      `${process.env.NEXT_PUBLIC_CONVEX_SITE_URL}/benchmark/upload`
-    );
-    const result = await fetch(postUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": file.type,
-        Authorization: `Bearer ${token}`,
-      },
-      body: file,
-    });
+  try {
+    const file = formData.get("fileupload") as File;
+    if (file.size > 0) {
+      const postUrl = new URL(
+        `${process.env.NEXT_PUBLIC_CONVEX_SITE_URL}/benchmark/upload`
+      );
+      const result = await fetch(postUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": file.type,
+          Authorization: `Bearer ${token}`,
+        },
+        body: file,
+      });
 
-    const body = await result.json();
-    console.log(body);
-    if (result.status === 200) {
-      alert(body.benchmarkId);
-    } else {
-      alert(body.error);
+      const body = await result.json();
+      console.log(body);
+      if (result.status === 200) {
+        alert(body.benchmarkId);
+      } else {
+        alert(body.error);
+      }
     }
+  } catch (error) {
+    alert(error);
   }
 };
 
@@ -62,10 +66,22 @@ export default function DevSandbox() {
   });
 
   const createJob = useMutation(api.job.createJob);
-  const jobs = useQuery(api.job.getUserJobs);
+  const {
+    results: jobList,
+    status: jobListStatus,
+    loadMore: jobListLoadMore,
+  } = usePaginatedQuery(api.job.getUserJobs, {}, { initialNumItems: 5 });
 
   const registerProvider = useMutation(api.provider.register);
-  const providers = useQuery(api.provider.getUserProviders);
+  const {
+    results: providers,
+    status: providersStatus,
+    loadMore: providersLoadMore,
+  } = usePaginatedQuery(
+    api.provider.getUserProviders,
+    {},
+    { initialNumItems: 5 }
+  );
 
   const handleBenchmarkSearch = (formData: FormData) => {
     const name = formData.get("benchmarkName")
@@ -247,7 +263,7 @@ export default function DevSandbox() {
         </div>
         <div>
           Current jobs:
-          {jobs?.map((j) => (
+          {jobList?.map((j) => (
             <div key={j._id} style={{ marginBottom: "8px" }}>
               <div>Id: {j._id}</div>
               <div>Benchmark Id: {j.benchmarkId}</div>
@@ -256,6 +272,14 @@ export default function DevSandbox() {
               <div>Status: {j.status}</div>
             </div>
           ))}
+          <button
+            type="button"
+            onClick={() => jobListLoadMore(5)}
+            disabled={jobListStatus !== "CanLoadMore"}
+          >
+            Load More{" "}
+            {providersStatus === "CanLoadMore" ? "" : "(nothing left)"}
+          </button>
         </div>
       </div>
       <div id="provider-stuff">
@@ -295,6 +319,14 @@ export default function DevSandbox() {
               <div>Status: {p.status}</div>
             </div>
           ))}
+          <button
+            type="button"
+            onClick={() => providersLoadMore(5)}
+            disabled={providersStatus !== "CanLoadMore"}
+          >
+            Load More{" "}
+            {providersStatus === "CanLoadMore" ? "" : "(nothing left)"}
+          </button>
         </div>
       </div>
       <div style={{ marginBottom: "32px" }} />
