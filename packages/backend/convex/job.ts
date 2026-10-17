@@ -17,7 +17,7 @@ export const createJob = mutation({
     if (!(await ctx.db.get("models", args.modelId))) {
       return { success: false, error: "Model not found" };
     }
-    if (!(await ctx.db.get("models", args.modelId))) {
+    if (!(await ctx.db.get("benchmarks", args.benchmarkId))) {
       return { success: false, error: "Benchmark not found" };
     }
 
