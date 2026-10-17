@@ -7,6 +7,8 @@ This contains information useful for interacting with the convex backend
 - [Public Functions](#public-functions)
   - [benchmark](#benchmark)
   - [model](#model)
+  - [job](#job)
+  - [provider](#provider)
 - [HTTP Endpoints](#http-endpoints)
 - [Benchmark File Format](#benchmark-file-format)
 - [Quick Testing from Client](#quick-testing-from-client)
@@ -15,30 +17,74 @@ This contains information useful for interacting with the convex backend
 
 ### benchmark
 
-`getBenchmarks`
-
-- `args`:
-  - `name : string | undefined`
-  - `ownerName : string | undefined`
-  - `version : string | undefined`
-- Returns up to 20 metadata records for benchmarks using name, owner name, and version as optional filters. Each record has the following properties:
-  - `_id : Id<"benchmarks">`
-  - `ownerName : string`
-  - `name : string`
-  - `description : string`
-  - `version : string`
-  - `contentHash : string`
+- `getBenchmarks` : query
+  - `args`:
+    - `name : string | undefined`
+    - `ownerName : string | undefined`
+    - `version : string | undefined`
+  - Returns up to 20 metadata records for benchmarks using name, owner name, and version as optional filters. Each record has the following properties:
+    - `_id : Id<"benchmarks">`
+    - `ownerName : string`
+    - `name : string`
+    - `description : string`
+    - `version : string`
+    - `contentHash : string`
 
 ### model
 
-`getModels`
+- `getModels` : query
+  - `args`:
+    - `name : string | undefined`
+  - Returns up to 20 records for models using name as an optional search filter. Each record has the following properties:
+    - `_id : Id<"models">`
+    - `_creationTime: number`
+    - `name : string`
 
-- `args`:
-  - `name : string | undefined`
-- Returns up to 20 records for models using name as an optional search filter. Each record has the following properties:
-  - `_id : Id<"models">`
-  - `_creationTime: number`
-  - `name : string`
+- Note that, currently, models must be added to the table manually through the dashboard
+
+### job
+
+- `createJob` : mutation
+  - `args`:
+    - `benchmarkId: Id<"benchmarks">`
+    - `modelId: Id<"models">`
+  - Creates a job with the provided benchmark id and model id
+  - Returns an object with the following properties:
+    - `success : boolean` - whether the job was succesfully created
+    - `error : string | undefined` - only defined on failure, detailing the cause
+    - `jobId : string | undefined` - only defined on success. The id of the created job
+    - `price : bigInt | undefined` - only defined on success. The calculated price, in Wei, of the created job
+
+- `getUserJobs` : query
+  - `args`:
+    - `paginationOpts : paginationOptsValidator`
+  - Paginated query that returns job records for the given user (see `convex/schema`)
+
+### provider
+
+- `register` : mutation
+  - `args`:
+    - `walletAddress : string`
+  - Creates a provider record with the provided wallet address. Note that this provider must be manually approved by setting `approved` to `true` in the dashboard
+    - Since there is no assignment process yet, approval and state (maxJobs, currentJobs, status) don't currently mean anything
+    - Backend verifies wallet address format but not ownership (this should be fine, as using someone else's address would bar a provider from sending results for jobs, with no benefit)
+  - Returns an object with the following properties:
+    - `success : boolean` - whether the provider was successfully registered
+    - `error : string | undefined` - only defined on failure, detailing the cause
+    - `providerId : string | undefined` - only defined on success. The id of the created provider record
+    - `secret : string | undefined` - only defined on success. The backend-generated secret for this provider
+      - Will be useable by the provider outside the frontend for authenticated heartbeat / state updates, once these are implemented, in lieu of betterauth
+  - This should be called by an authenticated user from the frontend. To prevent spam, a user can only have one unapproved provider at a time
+
+- `getUserProviders` : query
+  - `args`:
+    - `paginationOpts : paginationOptsValidator`
+  - Paginated query that returns provider records for the given user (see `convex/schema`)
+
+- `getProvider` : query
+  - `args`:
+    - `id : Id<"providers">`
+  - Returns the provider record with the given id (see `convex/schema`), or `null` if there is no match or the provider does not belong to the authenticated user
 
 ## HTTP Endpoints
 
