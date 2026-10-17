@@ -277,8 +277,7 @@ export default function DevSandbox() {
             onClick={() => jobListLoadMore(5)}
             disabled={jobListStatus !== "CanLoadMore"}
           >
-            Load More{" "}
-            {providersStatus === "CanLoadMore" ? "" : "(nothing left)"}
+            Load More {providersStatus === "Exhausted" ? "(nothing left)" : ""}
           </button>
         </div>
       </div>
@@ -324,8 +323,7 @@ export default function DevSandbox() {
             onClick={() => providersLoadMore(5)}
             disabled={providersStatus !== "CanLoadMore"}
           >
-            Load More{" "}
-            {providersStatus === "CanLoadMore" ? "" : "(nothing left)"}
+            Load More {providersStatus === "Exhausted" ? "(nothing left)" : ""}
           </button>
         </div>
       </div>

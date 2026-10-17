@@ -56,8 +56,9 @@ This contains information useful for interacting with the convex backend
     - `price : bigInt | undefined` - only defined on success. The calculated price, in Wei, of the created job
 
 - `getUserJobs` : query
-  - `args`: none
-  - Returns all job records for the given user (see `convex/schema`), or `[]` if they are not authenticated
+  - `args`:
+    - `paginationOpts : paginationOptsValidator`
+  - Paginated query that returns job records for the given user (see `convex/schema`)
 
 ### provider
 
@@ -76,8 +77,9 @@ This contains information useful for interacting with the convex backend
   - This should be called by an authenticated user from the frontend. To prevent spam, a user can only have one unapproved provider at a time
 
 - `getUserProviders` : query
-  - `args`: none
-  - Returns all provider records for the given user (see `convex/schema`), or `[]` if they are not authenticated
+  - `args`:
+    - `paginationOpts : paginationOptsValidator`
+  - Paginated query that returns provider records for the given user (see `convex/schema`)
 
 - `getProvider` : query
   - `args`:

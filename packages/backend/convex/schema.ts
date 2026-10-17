@@ -41,5 +41,7 @@ export default defineSchema({
     maxJobs: v.int64(),
     currentJobs: v.int64(),
     status: v.string(),
-  }).index("by_userId_approved", ["userId", "approved"]),
+  })
+    .index("by_userId_approved", ["userId", "approved"])
+    .index("by_userId", ["userId"]),
 });

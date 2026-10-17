@@ -77,7 +77,7 @@ export const getUserProviders = query({
 
     const providers = await ctx.db
       .query("providers")
-      .withIndex("by_userId_approved", (q) => q.eq("userId", identity.subject))
+      .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
       .order("desc")
       .paginate(args.paginationOpts);
     return providers;
