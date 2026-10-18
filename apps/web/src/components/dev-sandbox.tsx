@@ -82,6 +82,10 @@ export default function DevSandbox() {
     {},
     { initialNumItems: 5 }
   );
+  const setMaxJobs = useMutation(api.provider.setMaxJobs);
+  const addModelSupport = useMutation(api.provider.addModelSupport);
+  const removeModelSupport = useMutation(api.provider.removeModelSupport);
+  const providerSetStatus = useMutation(api.provider.setStatus);
 
   const handleBenchmarkSearch = (formData: FormData) => {
     const name = formData.get("benchmarkName")
@@ -124,6 +128,71 @@ export default function DevSandbox() {
     try {
       const providerAddress = String(formData.get("providerAddress"));
       const ret = await registerProvider({ walletAddress: providerAddress });
+      console.log(ret);
+      if (!ret.success) {
+        alert(ret.error);
+      }
+    } catch (error) {
+      console.log(error);
+      alert(error);
+    }
+  };
+
+  const handleSetMaxJobs = async (
+    formData: FormData,
+    providerId: Id<"providers">
+  ) => {
+    try {
+      const newMaxJobs = BigInt(String(formData.get("newMaxJobs")));
+      const ret = await setMaxJobs({ providerId, newMaxJobs });
+      console.log(ret);
+      if (!ret.success) {
+        alert(ret.error);
+      }
+    } catch (error) {
+      console.log(error);
+      alert(error);
+    }
+  };
+  const handleAddModel = async (
+    formData: FormData,
+    providerId: Id<"providers">
+  ) => {
+    try {
+      const modelId = formData.get("addModelId") as Id<"models">;
+      const ret = await addModelSupport({ providerId, modelId });
+      console.log(ret);
+      if (!ret.success) {
+        alert(ret.error);
+      }
+    } catch (error) {
+      console.log(error);
+      alert(error);
+    }
+  };
+  const handleRemoveModel = async (
+    formData: FormData,
+    providerId: Id<"providers">
+  ) => {
+    try {
+      const modelId = formData.get("removeModelId") as Id<"models">;
+      const ret = await removeModelSupport({ providerId, modelId });
+      console.log(ret);
+      if (!ret.success) {
+        alert(ret.error);
+      }
+    } catch (error) {
+      console.log(error);
+      alert(error);
+    }
+  };
+  const handleSetStatus = async (
+    formData: FormData,
+    providerId: Id<"providers">
+  ) => {
+    try {
+      const newStatus = String(formData.get("newStatus"));
+      const ret = await providerSetStatus({ providerId, newStatus });
       console.log(ret);
       if (!ret.success) {
         alert(ret.error);
@@ -313,9 +382,77 @@ export default function DevSandbox() {
               </div>
               <div>Wallet Address: {p.walletAddress}</div>
               <div>Approved: {String(p.approved)}</div>
-              <div>Max Jobs: {p.maxJobs}</div>
+              <div>
+                Max Jobs: {p.maxJobs}
+                <form action={(formData) => handleSetMaxJobs(formData, p._id)}>
+                  <input
+                    type="text"
+                    id="newMaxJobs"
+                    name="newMaxJobs"
+                    placeholder="New Max Jobs"
+                    style={{ border: "1px solid black" }}
+                  />
+                  <button
+                    style={{ backgroundColor: "ButtonFace" }}
+                    type="submit"
+                  >
+                    Change
+                  </button>
+                </form>
+              </div>
               <div>Current Jobs: {p.currentJobs}</div>
-              <div>Status: {p.status}</div>
+              <div>
+                Status: {p.status}
+                <form action={(formData) => handleSetStatus(formData, p._id)}>
+                  <input
+                    type="text"
+                    id="newStatus"
+                    name="newStatus"
+                    placeholder="New status (ready or offline)"
+                    style={{ border: "1px solid black" }}
+                  />
+                  <button
+                    style={{ backgroundColor: "ButtonFace" }}
+                    type="submit"
+                  >
+                    Update status
+                  </button>
+                </form>
+              </div>
+              <div>Last Heartbeat: {p.lastHeartbeat}</div>
+              <div>
+                Supported Models: {p.models.map((m) => `${m} `)}
+                <form action={(formData) => handleAddModel(formData, p._id)}>
+                  <input
+                    type="text"
+                    id="addModelId"
+                    name="addModelId"
+                    placeholder="Model Id"
+                    style={{ border: "1px solid black" }}
+                  />
+                  <button
+                    style={{ backgroundColor: "ButtonFace" }}
+                    type="submit"
+                  >
+                    Add support for model
+                  </button>
+                </form>
+                <form action={(formData) => handleRemoveModel(formData, p._id)}>
+                  <input
+                    type="text"
+                    id="removeModelId"
+                    name="removeModelId"
+                    placeholder="Model Id"
+                    style={{ border: "1px solid black" }}
+                  />
+                  <button
+                    style={{ backgroundColor: "ButtonFace" }}
+                    type="submit"
+                  >
+                    Remove support for model
+                  </button>
+                </form>
+              </div>
             </div>
           ))}
           <button

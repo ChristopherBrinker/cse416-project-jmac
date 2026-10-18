@@ -41,7 +41,15 @@ export default defineSchema({
     maxJobs: v.int64(),
     currentJobs: v.int64(),
     status: v.string(),
+    lastHeartbeat: v.number(),
   })
     .index("by_userId_approved", ["userId", "approved"])
     .index("by_userId", ["userId"]),
+
+  model_support: defineTable({
+    providerId: v.id("providers"),
+    modelId: v.id("models"),
+  })
+    .index("by_providerId", ["providerId"])
+    .index("by_modelId", ["modelId"]),
 });

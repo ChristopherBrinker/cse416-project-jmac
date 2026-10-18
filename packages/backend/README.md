@@ -73,18 +73,61 @@ This contains information useful for interacting with the convex backend
     - `error : string | undefined` - only defined on failure, detailing the cause
     - `providerId : string | undefined` - only defined on success. The id of the created provider record
     - `secret : string | undefined` - only defined on success. The backend-generated secret for this provider
-      - Will be useable by the provider outside the frontend for authenticated heartbeat / state updates, once these are implemented, in lieu of betterauth
   - This should be called by an authenticated user from the frontend. To prevent spam, a user can only have one unapproved provider at a time
+
+- `addModelSupport` : mutation
+  - `args`:
+    - `providerId : Id<"providers">`
+    - `modelId : Id<"models">`
+  - Called by an authenticated user from the frontend. Tells the backend that this provider supports the model given by `modelId` and can receive jobs with this `modelId`
+  - Provider must have status `"offline"`
+  - Returns an object with the following properties:
+    - `success : boolean` - whether the model_support record was succesfully added
+    - `error : string | undefined` - only defined on failure, detailing the cause
+
+- `removeModelSupport` : mutation
+  - `args`:
+    - `providerId : Id<"providers">`
+    - `modelId : Id<"models">`
+  - Called by an authenticated user from the frontend. Tells the backend that this provider no longer supports the model given by `modelId` and should not receive jobs with this `modelId`
+  - Provider must have status `"offline"`
+  - Returns an object with the following properties:
+    - `success : boolean` - whether the model_support record was succesfully deleted
+    - `error : string | undefined` - only defined on failure, detailing the cause
+
+- `setMaxJobs` : mutation
+  - `args`:
+    - `providerId : Id<"providers">`
+    - `newMaxJobs : bigint`
+  - Called by an authenticated user from the frontend. Updates the maximum number of concurrent jobs the provider can support (note this is 0 when first registered, maximum value is 20)
+  - Provider must have status `"offline"`
+  - Returns an object with the following properties:
+    - `success : boolean` - whether the model_support record was succesfully deleted
+    - `error : string | undefined` - only defined on failure, detailing the cause
+
+- `setStatus` : mutation
+  - `args`:
+    - `providerId : Id<"providers">`
+    - `newStatus : string`,
+    - `secret : string | undefined`
+  - Updates provider status to the indicated status (`"offline"` or `"ready"`)
+  - Can be called from the frontend by an authenticated user (without a secret) or from elsewhere using the provider's secret
+  - Returns an object with the following properties:
+    - `success : boolean` - whether the model_support record was succesfully deleted
+    - `error : string | undefined` - only defined on failure, detailing the cause
+
+- `heartbeat` : mutation
+  - `args`:
+    - `providerId : Id<"providers">`
+    - `secret : string`
+  - Updates lastHeartbeat for the provider
+  - Will be regularly called by the providers (using secret)
+    - The backend will eventually make scheduled checks for whichever `ready` provider neglects to call heartbeat, setting status to `disconnected`
 
 - `getUserProviders` : query
   - `args`:
     - `paginationOpts : paginationOptsValidator`
-  - Paginated query that returns provider records for the given user (see `convex/schema`)
-
-- `getProvider` : query
-  - `args`:
-    - `id : Id<"providers">`
-  - Returns the provider record with the given id (see `convex/schema`), or `null` if there is no match or the provider does not belong to the authenticated user
+  - Paginated query that returns provider records for the given user, including the model ids each support (see `convex/schema`)
 
 ## HTTP Endpoints
 
