@@ -6,6 +6,8 @@ import { useQuery, useMutation, usePaginatedQuery } from "convex/react";
 import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { createBlockchainClient } from "@/lib/blockchain";
+import type { BlockchainClient } from "@/lib/blockchain";
 
 const handleSubmit = async (formData: FormData) => {
   let token;
@@ -49,6 +51,10 @@ const handleSubmit = async (formData: FormData) => {
 };
 
 export default function DevSandbox() {
+  const [blockchainClient, setBlockchainClient] = useState<
+    BlockchainClient | undefined
+  >();
+
   const [searchBenchmarkName, setSearchBenchmarkName] = useState<
     string | undefined
   >();
@@ -86,6 +92,38 @@ export default function DevSandbox() {
   const addModelSupport = useMutation(api.provider.addModelSupport);
   const removeModelSupport = useMutation(api.provider.removeModelSupport);
   const providerSetStatus = useMutation(api.provider.setStatus);
+
+  const connectToBlockchain = async (formData: FormData) => {
+    const privateKey = String(formData.get("privateKey"));
+    if (privateKey && privateKey.slice(0, 2) === "0x") {
+      const pk = privateKey as `0x${string}`;
+      setBlockchainClient(await createBlockchainClient(pk));
+      alert("Connected successfully");
+    } else {
+      alert("Invalid private key");
+    }
+  };
+
+  const testBlockChain = async () => {
+    if (blockchainClient) {
+      try {
+        const { request } =
+          await blockchainClient.publicClient.simulateContract({
+            account: blockchainClient.account,
+            address: blockchainClient.account.address,
+            abi: blockchainClient.abi,
+            functionName: "setNumber",
+            args: [15n],
+          });
+        const hash = await blockchainClient.walletClient.writeContract(request);
+        await blockchainClient.publicClient.waitForTransactionReceipt({ hash });
+        alert("success");
+      } catch (error) {
+        console.log(error);
+        alert(error);
+      }
+    }
+  };
 
   const handleBenchmarkSearch = (formData: FormData) => {
     const name = formData.get("benchmarkName")
@@ -205,6 +243,39 @@ export default function DevSandbox() {
 
   return (
     <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
+      <div id="blockchain-stuff">
+        <div>
+          Connect wallet (enter private key directly - sufficient for mvp)
+          <form action={connectToBlockchain}>
+            <div>
+              <input
+                type="text"
+                id="privateKey"
+                name="privateKey"
+                placeholder="Wallet private key"
+                style={{ border: "1px solid black" }}
+              />
+            </div>
+            <div>
+              <button style={{ backgroundColor: "ButtonFace" }} type="submit">
+                Send
+              </button>
+            </div>
+          </form>
+          {blockchainClient ? (
+            <div>
+              Connected
+              <div>
+                <button type="button" onClick={testBlockChain}>
+                  Test
+                </button>
+              </div>
+            </div>
+          ) : (
+            ""
+          )}
+        </div>
+      </div>
       <div id="benchmark-upload">
         Benchmark upload
         <form action={handleSubmit}>

@@ -1,0 +1,86 @@
+{
+  "abi": [
+    {
+      "type": "function",
+      "name": "number",
+      "inputs": [],
+      "outputs": [{ "name": "", "type": "uint256", "internalType": "uint256" }],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "setNumber",
+      "inputs": [
+        { "name": "newNumber", "type": "uint256", "internalType": "uint256" }
+      ],
+      "outputs": [],
+      "stateMutability": "nonpayable"
+    }
+  ],
+  "bytecode": {
+    "object": "0x6080604052348015600e575f5ffd5b506101268061001c5f395ff3fe6080604052348015600e575f5ffd5b50600436106030575f3560e01c80633fb5c1cb1460345780638381f58a14604c575b5f5ffd5b604a60048036038101906046919060a6565b6066565b005b6052606f565b604051605d919060d9565b60405180910390f35b805f8190555050565b5f5481565b5f5ffd5b5f819050919050565b6088816078565b81146091575f5ffd5b50565b5f8135905060a0816081565b92915050565b5f6020828403121560b85760b76074565b5b5f60c3848285016094565b91505092915050565b60d3816078565b82525050565b5f60208201905060ea5f83018460cc565b9291505056fea26469706673582212201e7ec4a0d30f42d2e876f6c8a93f59cb9ca1f46c93707695b71f827245eafd2264736f6c63430008250033",
+    "sourceMap": "65:136:16:-:0;;;;;;;;;;;;;;;;;;;",
+    "linkReferences": {}
+  },
+  "deployedBytecode": {
+    "object": "0x6080604052348015600e575f5ffd5b50600436106030575f3560e01c80633fb5c1cb1460345780638381f58a14604c575b5f5ffd5b604a60048036038101906046919060a6565b6066565b005b6052606f565b604051605d919060d9565b60405180910390f35b805f8190555050565b5f5481565b5f5ffd5b5f819050919050565b6088816078565b81146091575f5ffd5b50565b5f8135905060a0816081565b92915050565b5f6020828403121560b85760b76074565b5b5f60c3848285016094565b91505092915050565b60d3816078565b82525050565b5f60208201905060ea5f83018460cc565b9291505056fea26469706673582212201e7ec4a0d30f42d2e876f6c8a93f59cb9ca1f46c93707695b71f827245eafd2264736f6c63430008250033",
+    "sourceMap": "65:136:16:-:0;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;119:80;;;;;;;;;;;;;:::i;:::-;;:::i;:::-;;91:21;;;:::i;:::-;;;;;;;:::i;:::-;;;;;;;;119:80;183:9;174:6;:18;;;;119:80;:::o;91:21::-;;;;:::o;88:117:17:-;197:1;194;187:12;334:77;371:7;400:5;389:16;;334:77;;;:::o;417:122::-;490:24;508:5;490:24;:::i;:::-;483:5;480:35;470:63;;529:1;526;519:12;470:63;417:122;:::o;545:139::-;591:5;629:6;616:20;607:29;;645:33;672:5;645:33;:::i;:::-;545:139;;;;:::o;690:329::-;749:6;798:2;786:9;777:7;773:23;769:32;766:119;;;804:79;;:::i;:::-;766:119;924:1;949:53;994:7;985:6;974:9;970:22;949:53;:::i;:::-;939:63;;895:117;690:329;;;;:::o;1025:118::-;1112:24;1130:5;1112:24;:::i;:::-;1107:3;1100:37;1025:118;;:::o;1149:222::-;1242:4;1280:2;1269:9;1265:18;1257:26;;1293:71;1361:1;1350:9;1346:17;1337:6;1293:71;:::i;:::-;1149:222;;;;:::o",
+    "linkReferences": {}
+  },
+  "methodIdentifiers": {
+    "number()": "8381f58a",
+    "setNumber(uint256)": "3fb5c1cb"
+  },
+  "rawMetadata": "{\"compiler\":{\"version\":\"0.8.37+commit.f401782d\"},\"language\":\"Solidity\",\"output\":{\"abi\":[{\"inputs\":[],\"name\":\"number\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"newNumber\",\"type\":\"uint256\"}],\"name\":\"setNumber\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}],\"devdoc\":{\"kind\":\"dev\",\"methods\":{},\"version\":1},\"userdoc\":{\"kind\":\"user\",\"methods\":{},\"version\":1}},\"settings\":{\"compilationTarget\":{\"src/Evaluation.sol\":\"Evaluation\"},\"evmVersion\":\"osaka\",\"libraries\":{},\"metadata\":{\"bytecodeHash\":\"ipfs\"},\"optimizer\":{\"enabled\":false,\"runs\":200},\"remappings\":[\":forge-std/=lib/forge-std/src/\"]},\"sources\":{\"src/Evaluation.sol\":{\"keccak256\":\"0xc37aea13f694998518a9d36c8065b3af7d1efbf7e0ecb4e6e0d1e6f67a7c4d08\",\"license\":\"UNLICENSED\",\"urls\":[\"bzz-raw://283792787e856a895fa833c759d5f36d2ecd2b5193a02fe9234604014830c482\",\"dweb:/ipfs/QmREngzUcUB5bjh2WrrB7s7aLxq9gLNJPfsEd6GKUvsJ7n\"]}},\"version\":1}",
+  "metadata": {
+    "compiler": { "version": "0.8.37+commit.f401782d" },
+    "language": "Solidity",
+    "output": {
+      "abi": [
+        {
+          "inputs": [],
+          "stateMutability": "view",
+          "type": "function",
+          "name": "number",
+          "outputs": [
+            { "internalType": "uint256", "name": "", "type": "uint256" }
+          ]
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "newNumber",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "nonpayable",
+          "type": "function",
+          "name": "setNumber"
+        }
+      ],
+      "devdoc": { "kind": "dev", "methods": {}, "version": 1 },
+      "userdoc": { "kind": "user", "methods": {}, "version": 1 }
+    },
+    "settings": {
+      "remappings": ["forge-std/=lib/forge-std/src/"],
+      "optimizer": { "enabled": false, "runs": 200 },
+      "metadata": { "bytecodeHash": "ipfs" },
+      "compilationTarget": { "src/Evaluation.sol": "Evaluation" },
+      "evmVersion": "osaka",
+      "libraries": {}
+    },
+    "sources": {
+      "src/Evaluation.sol": {
+        "keccak256": "0xc37aea13f694998518a9d36c8065b3af7d1efbf7e0ecb4e6e0d1e6f67a7c4d08",
+        "urls": [
+          "bzz-raw://283792787e856a895fa833c759d5f36d2ecd2b5193a02fe9234604014830c482",
+          "dweb:/ipfs/QmREngzUcUB5bjh2WrrB7s7aLxq9gLNJPfsEd6GKUvsJ7n"
+        ],
+        "license": "UNLICENSED"
+      }
+    },
+    "version": 1
+  },
+  "id": 16
+}
