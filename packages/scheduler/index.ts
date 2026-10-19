@@ -1,7 +1,12 @@
 import { readFile } from "node:fs/promises";
 
 import "dotenv/config";
-import { createPublicClient, createWalletClient, http } from "viem";
+import {
+  createPublicClient,
+  createWalletClient,
+  http,
+  decodeEventLog,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
 
@@ -32,19 +37,38 @@ async function main() {
   const abiHolder = JSON.parse(abiContents);
   const abi = abiHolder["abi"];
 
-  try {
+  publicClient.watchEvent({
+    onLogs: (logs) => {
+      for (const log of logs) {
+        try {
+          const decoded = decodeEventLog({
+            abi,
+            data: log.data,
+            topics: log.topics,
+          });
+
+          console.log("Found Event:", decoded);
+        } catch {
+          console.log("error");
+        }
+      }
+    },
+  });
+
+  /*try {
     const { request } = await publicClient.simulateContract({
       account,
       address: process.env.CONTRACT_ADDRESS as `0x${string}`,
       abi,
-      functionName: "setNumber",
-      args: [10n],
+      functionName: "fundJob",
+      args: ["jd77wx5ygtg8q5jzvqnbypfmvs8gcfx5"],
+      value: 2500n
     });
     const hash = await walletClient.writeContract(request);
     await publicClient.waitForTransactionReceipt({ hash });
   } catch (error) {
     console.log(error);
-  }
+  }*/
 }
 
 main();

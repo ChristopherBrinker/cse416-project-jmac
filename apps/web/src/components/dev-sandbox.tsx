@@ -6,7 +6,7 @@ import { useQuery, useMutation, usePaginatedQuery } from "convex/react";
 import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
-import { createBlockchainClient } from "@/lib/blockchain";
+import { contractAddress, createBlockchainClient } from "@/lib/blockchain";
 import type { BlockchainClient } from "@/lib/blockchain";
 
 const handleSubmit = async (formData: FormData) => {
@@ -104,16 +104,17 @@ export default function DevSandbox() {
     }
   };
 
-  const testBlockChain = async () => {
+  const fundJob = async (jobId: Id<"jobs">) => {
     if (blockchainClient) {
       try {
         const { request } =
           await blockchainClient.publicClient.simulateContract({
             account: blockchainClient.account,
-            address: blockchainClient.account.address,
+            address: contractAddress,
             abi: blockchainClient.abi,
-            functionName: "setNumber",
-            args: [15n],
+            functionName: "fundJob",
+            args: [String(jobId)],
+            value: 2500n,
           });
         const hash = await blockchainClient.walletClient.writeContract(request);
         await blockchainClient.publicClient.waitForTransactionReceipt({ hash });
@@ -262,18 +263,7 @@ export default function DevSandbox() {
               </button>
             </div>
           </form>
-          {blockchainClient ? (
-            <div>
-              Connected
-              <div>
-                <button type="button" onClick={testBlockChain}>
-                  Test
-                </button>
-              </div>
-            </div>
-          ) : (
-            ""
-          )}
+          {blockchainClient ? <div>Connected</div> : ""}
         </div>
       </div>
       <div id="benchmark-upload">
@@ -410,6 +400,19 @@ export default function DevSandbox() {
               <div>Model Id: {j.modelId}</div>
               <div>Price: {j.price}</div>
               <div>Status: {j.status}</div>
+              <div>
+                {blockchainClient ? (
+                  <button
+                    type="button"
+                    style={{ backgroundColor: "ButtonFace" }}
+                    onClick={() => fundJob(j._id)}
+                  >
+                    Fund
+                  </button>
+                ) : (
+                  "Connect wallet to fund jobs"
+                )}
+              </div>
             </div>
           ))}
           <button
