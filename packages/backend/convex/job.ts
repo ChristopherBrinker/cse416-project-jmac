@@ -144,11 +144,19 @@ export const setStatus = mutation({
       return { success: false, error: "Job not found" };
     }
 
+    if (job.status === "failure" || job.status !== "success") {
+      return {
+        success: false,
+        error: "Job is already in a final state",
+      };
+    }
+
     await ctx.db.patch("jobs", job._id, { status: args.status });
 
     const job_assignments = await ctx.db
       .query("job_assignments")
       .withIndex("by_jobId", (q) => q.eq("jobId", job._id))
+      .filter((q) => q.eq(q.field("finished"), false))
       .collect();
     for (const ja of job_assignments) {
       await ctx.db.patch("job_assignments", ja._id, { finished: true });
@@ -157,7 +165,7 @@ export const setStatus = mutation({
       await ctx.db.patch("providers", p._id, {
         currentJobs: p.currentJobs - 1n,
       });
-      if (p.currentJobs === p.maxJobs) {
+      if (p.currentJobs === p.maxJobs && p.status === "ready") {
         const model_support = await ctx.db
           .query("model_support")
           .withIndex("by_providerId", (q) => q.eq("providerId", p._id))

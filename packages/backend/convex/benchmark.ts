@@ -338,7 +338,8 @@ export const getBenchmarkFile = httpAction(async (ctx, request) => {
     }
 
     return new Response(blob);
-  } catch {
+  } catch (error) {
+    console.log(error);
     return new Response(JSON.stringify({ error: "Unknown error" }), {
       status: 500,
       headers: new Headers({

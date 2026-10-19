@@ -118,6 +118,3 @@ async function main() {
 }
 
 main();
-setInterval(() => {
-  console.log("test");
-}, 10_000);

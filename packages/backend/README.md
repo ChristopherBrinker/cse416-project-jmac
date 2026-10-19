@@ -182,6 +182,7 @@ The `/dev-sandbox` path on the client (component in `apps/web/src/app/components
    - You will be barred from making another until you approve the first one (see next step)
    - Payout is not currently implemented, but you should probably choose two addresses output from anvil as the providers' wallet addresses
 1. For each provider, set `approved` to `true` from the Convex dashboard
+1. For each provider, from the frontend, add the model via addModelSupport (provider must still be `offline`)
 1. For each provider, from the frontend, set max jobs and set status to `ready`
    - The backend cannot currently mark jobs as complete, so for testing set max jobs to 20
 1. From the frontend, create a job with the benchmarkId and modelId
