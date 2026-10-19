@@ -33,6 +33,15 @@ export default defineSchema({
     status: v.string(),
   }).index("by_creatorId", ["creatorId"]),
 
+  job_assignments: defineTable({
+    jobId: v.id("jobs"),
+    providerId: v.id("providers"),
+    finished: v.boolean(),
+  })
+    .index("by_providerId_finished", ["providerId", "finished"])
+    .index("by_jobId", ["jobId"])
+    .index("by_jobId_providerId_finished", ["jobId", "providerId", "finished"]),
+
   providers: defineTable({
     userId: v.string(),
     secret: v.string(),
@@ -49,7 +58,8 @@ export default defineSchema({
   model_support: defineTable({
     providerId: v.id("providers"),
     modelId: v.id("models"),
+    available: v.boolean(),
   })
     .index("by_providerId", ["providerId"])
-    .index("by_modelId", ["modelId"]),
+    .index("by_modelId_available", ["modelId", "available"]),
 });

@@ -2,7 +2,7 @@ import { httpRouter } from "convex/server";
 
 import { httpAction } from "./_generated/server";
 import { authComponent, createAuth } from "./auth";
-import { uploadBenchmark } from "./benchmark";
+import { uploadBenchmark, getBenchmarkFile } from "./benchmark";
 
 const http = httpRouter();
 
@@ -39,6 +39,12 @@ http.route({
   path: "/benchmark/upload",
   method: "OPTIONS",
   handler: optionsHandler,
+});
+
+http.route({
+  path: "/benchmark",
+  method: "GET",
+  handler: getBenchmarkFile,
 });
 
 authComponent.registerRoutes(http, createAuth);

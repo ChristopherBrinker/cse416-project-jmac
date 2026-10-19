@@ -40,5 +40,8 @@ export default defineConfig({
     "typescript/no-explicit-any": "warn",
     "typescript/no-non-null-assertion": "warn",
     "no-alert": "off",
+    "no-unused-vars": "warn",
+    "no-await-in-loop": "warn",
+    "no-nested-ternary": "off",
   },
 });
