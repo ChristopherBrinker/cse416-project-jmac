@@ -1,0 +1,163 @@
+"""Run the provider presence lifecycle; assignment execution is not available yet."""
+
+import argparse
+import logging
+import os
+import signal
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
+from functools import partial
+from pathlib import Path
+from threading import Event
+
+from .inference import DEFAULT_CACHE_DIRECTORY, LocalModelRunner, Question
+from .provider_api import ProviderAPIError, ProviderClient, ProviderConfig
+
+LOGGER = logging.getLogger(__name__)
+
+
+def config_from_environment(environment: Mapping[str, str]) -> ProviderConfig:
+    required = ("CONVEX_URL", "JMAC_PROVIDER_ID", "JMAC_PROVIDER_SECRET")
+    for name in required:
+        if not environment.get(name):
+            raise ValueError(f"Set {name} before starting the provider worker")
+
+    def number(name: str, default: str) -> float:
+        try:
+            return float(environment.get(name, default))
+        except ValueError:
+            # Never include a malformed configuration value in the error message.
+            raise ValueError(f"{name} must be a valid number") from None
+
+    try:
+        retries = int(environment.get("JMAC_MAX_RETRIES", "3"))
+    except ValueError:
+        raise ValueError(
+            "JMAC_MAX_RETRIES must be an integer between 0 and 5"
+        ) from None
+    return ProviderConfig(
+        deployment_url=environment["CONVEX_URL"],
+        provider_id=environment["JMAC_PROVIDER_ID"],
+        secret=environment["JMAC_PROVIDER_SECRET"],
+        heartbeat_interval=number("JMAC_HEARTBEAT_INTERVAL_SECONDS", "15"),
+        request_timeout=number("JMAC_REQUEST_TIMEOUT_SECONDS", "10"),
+        max_retries=retries,
+    )
+
+
+class _ShutdownRequested(Exception):
+    pass
+
+
+class ModelStartupError(RuntimeError):
+    pass
+
+
+def _call_with_retries(
+    operation: Callable[[], None], config: ProviderConfig, stop: Event
+) -> None:
+    for attempt in range(config.max_retries + 1):
+        if stop.is_set():
+            raise _ShutdownRequested
+        try:
+            operation()
+            return
+        except ProviderAPIError as error:
+            if not error.retryable or attempt == config.max_retries:
+                raise
+            delay = 2**attempt
+            LOGGER.warning(
+                "Provider connection unavailable; retrying in %s seconds.", delay
+            )
+            if stop.wait(delay):
+                raise _ShutdownRequested from None
+
+
+def run_provider(
+    config: ProviderConfig,
+    client: ProviderClient,
+    model_loader: Callable[[], LocalModelRunner],
+    stop: Event,
+) -> None:
+    backend_touched = False
+    try:
+        _call_with_retries(lambda: client.set_status("offline"), config, stop)
+        backend_touched = True
+        if stop.is_set():
+            return
+        LOGGER.info("Provider offline. Loading and warming up the pinned model.")
+        try:
+            runner = model_loader()
+            runner.predict(
+                [Question("startup-check", "Select the only choice.", ("Ready",))]
+            )
+        except Exception:
+            raise ModelStartupError(
+                "Pinned model could not be loaded or warmed up."
+            ) from None
+        if stop.is_set():
+            return
+        _call_with_retries(client.heartbeat, config, stop)
+        _call_with_retries(lambda: client.set_status("ready"), config, stop)
+        LOGGER.info(
+            "Provider ready. Sending heartbeats; assignment execution is not enabled."
+        )
+        while not stop.wait(config.heartbeat_interval):
+            _call_with_retries(client.heartbeat, config, stop)
+    except _ShutdownRequested:
+        return
+    finally:
+        if backend_touched:
+            try:
+                # One bounded attempt, even when shutdown interrupted a retry delay.
+                client.set_status("offline")
+                LOGGER.info("Provider offline.")
+            except ProviderAPIError:
+                LOGGER.error(
+                    "Could not confirm offline status; check the provider in the backend."
+                )
+
+
+@contextmanager
+def shutdown_signals(stop: Event) -> Iterator[None]:
+    def request_stop(_signum: int, _frame: object) -> None:
+        stop.set()
+
+    previous = {
+        kind: signal.signal(kind, request_stop)
+        for kind in (signal.SIGINT, signal.SIGTERM)
+    }
+    try:
+        yield
+    finally:
+        for kind, handler in previous.items():
+            signal.signal(kind, handler)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Connect the pinned worker to the provider API."
+    )
+    parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIRECTORY)
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Use cached model files only; backend requests still use networking",
+    )
+    args = parser.parse_args()
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    try:
+        config = config_from_environment(os.environ)
+        stop = Event()
+        loader = partial(LocalModelRunner, args.cache_dir, offline=args.offline)
+        with shutdown_signals(stop):
+            run_provider(config, ProviderClient(config), loader, stop)
+    except (ValueError, ProviderAPIError, ModelStartupError) as error:
+        parser.exit(1, f"error: {error}\n")
+    except Exception:
+        # Third-party exceptions can include URLs, request payloads, or environment values.
+        parser.exit(1, "error: Provider worker failed during startup or execution.\n")
+
+
+if __name__ == "__main__":
+    main()
