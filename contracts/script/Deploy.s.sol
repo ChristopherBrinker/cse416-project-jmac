@@ -12,7 +12,9 @@ contract EvaluationScript is Script {
     function run() public {
         vm.startBroadcast();
 
-        evaluation = new Evaluation();
+        address backendAddr = vm.envAddress("BACKEND_ADDRESS");
+
+        evaluation = new Evaluation(backendAddr);
 
         vm.stopBroadcast();
     }

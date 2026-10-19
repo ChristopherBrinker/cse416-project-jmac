@@ -103,6 +103,7 @@ export const addModelSupport = mutation({
     await ctx.db.insert("model_support", {
       providerId: provider._id,
       modelId: model._id,
+      available: false,
     });
 
     return { success: true };
@@ -209,14 +210,41 @@ export const setStatus = mutation({
       return { success: false, error: "Invalid authentication" };
     }
 
+    if (!provider.approved) {
+      return {
+        success: false,
+        error: "Only approved providers can change status",
+      };
+    }
+
     if (args.newStatus !== "ready" && args.newStatus !== "offline") {
       return {
         success: false,
         error: "Provided status is invalid. Must be 'ready' or 'offline'",
       };
     }
+    if (args.newStatus === "ready" && provider.maxJobs === 0n) {
+      return {
+        success: false,
+        error:
+          "Set max jobs to a positive value (between 1 and 20, inclusive) before setting status to 'ready'",
+      };
+    }
+    if (args.newStatus === provider.status) {
+      return { success: true };
+    }
 
     await ctx.db.patch("providers", provider._id, { status: args.newStatus });
+
+    const newAvailable =
+      args.newStatus === "ready" && provider.currentJobs < provider.maxJobs;
+    const model_support = await ctx.db
+      .query("model_support")
+      .withIndex("by_providerId", (q) => q.eq("providerId", provider._id))
+      .collect();
+    for (const ms of model_support) {
+      await ctx.db.patch("model_support", ms._id, { available: newAvailable });
+    }
 
     return { success: true };
   },

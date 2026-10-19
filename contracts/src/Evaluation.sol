@@ -21,7 +21,15 @@ struct Provider {
 contract Evaluation {
     mapping(string => Job) public jobs;
 
+    address backend;
+
     event JobFunded(string jobId, uint256 price);
+    event ProvidersAssigned(string jobId, address addressA, string providerIdA, address addressB, string providerIdB);
+
+    constructor(address backendAddr) {
+        require(backendAddr != address(0), "Must provide a backend address");
+        backend = backendAddr;
+    }
 
     function fundJob(string memory jobId) external payable {
         require(msg.value > 0, "Funding required");
@@ -33,5 +41,35 @@ contract Evaluation {
         j.flag = true;
         jobs[jobId] = j;
         emit JobFunded(jobId, msg.value);
+    }
+
+    function assignProviders(string memory jobId, address addressA, string memory providerIdA, address addressB, string memory providerIdB) public {
+        require(msg.sender == backend, "Unauthorized");
+        require(addressA != address(0), "Invalid address");
+        require(addressB != address(0), "Invalid address");
+
+        Job memory j = jobs[jobId];
+        require(j.flag, "Job not found");
+
+        Provider memory providerA = Provider({
+            addr: addressA,
+            id: providerIdA,
+            flag: true,
+            commit: "",
+            result: new bool[](0)
+        });
+        Provider memory providerB = Provider({
+            addr: addressB,
+            id: providerIdB,
+            flag: true,
+            commit: "",
+            result: new bool[](0)
+        });
+
+        j.providerA = providerA;
+        j.providerB = providerB;
+
+        jobs[jobId] = j;
+        emit ProvidersAssigned(jobId, addressA, providerIdA, addressB, providerIdB);
     }
 }

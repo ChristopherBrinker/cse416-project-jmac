@@ -74,6 +74,8 @@
       "name": "@cse416-project-jmac/scheduler",
       "version": "1.0.0",
       "dependencies": {
+        "@cse416-project-jmac/backend": "workspace:*",
+        "convex": "catalog:",
         "dotenv": "^18.0.8",
         "viem": "^2.57.7",
       },

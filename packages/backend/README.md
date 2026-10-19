@@ -12,6 +12,7 @@ This contains information useful for interacting with the convex backend
 - [HTTP Endpoints](#http-endpoints)
 - [Benchmark File Format](#benchmark-file-format)
 - [Quick Testing from Client](#quick-testing-from-client)
+- [Setting Up Evaluations](#setting-up-evaluations)
 
 ## Public Functions
 
@@ -60,13 +61,19 @@ This contains information useful for interacting with the convex backend
     - `paginationOpts : paginationOptsValidator`
   - Paginated query that returns job records for the given user (see `convex/schema`)
 
+- `getJobsForProvider` : query
+  - `args`:
+    - `providerId : Id<"providers">`
+    - `secret : string`
+  - Returns all active job_assignment records (see `convex/schema`) for this provider, assuming authentication with the provided secret
+  - Provider should listen to this to receive jobs
+
 ### provider
 
 - `register` : mutation
   - `args`:
     - `walletAddress : string`
   - Creates a provider record with the provided wallet address. Note that this provider must be manually approved by setting `approved` to `true` in the dashboard
-    - Since there is no assignment process yet, approval and state (maxJobs, currentJobs, status) don't currently mean anything
     - Backend verifies wallet address format but not ownership (this should be fine, as using someone else's address would bar a provider from sending results for jobs, with no benefit)
   - Returns an object with the following properties:
     - `success : boolean` - whether the provider was successfully registered
@@ -115,6 +122,7 @@ This contains information useful for interacting with the convex backend
   - Returns an object with the following properties:
     - `success : boolean` - whether the model_support record was succesfully deleted
     - `error : string | undefined` - only defined on failure, detailing the cause
+  - Status can be set to `"offline"` despite having active jobs. This does not cancel the jobs, and the provider is still responsible for them. It simply indicates that the provider should not be assigned any <i>new</i> jobs
 
 - `heartbeat` : mutation
   - `args`:
@@ -122,7 +130,7 @@ This contains information useful for interacting with the convex backend
     - `secret : string`
   - Updates lastHeartbeat for the provider
   - Will be regularly called by the providers (using secret)
-    - The backend will eventually make scheduled checks for whichever `ready` provider neglects to call heartbeat, setting status to `disconnected`
+    - [NOT IMPLEMENTED YET] The backend will eventually make scheduled checks for whichever `ready` provider neglects to call heartbeat, setting status to `disconnected`
 
 - `getUserProviders` : query
   - `args`:
@@ -143,7 +151,10 @@ For HTTP actions that require authentication, make sure to set `Authorization: B
 - On failure, returns a JSON object with an `error` property detailing the cause of the error
   - Note that benchmarks must have a unique set of (name, ownerId, version). If an existing benchmark matches all three of these fields, the action fails
 
-There is currently no way to get the actual benchmark files
+`GET /benchmark?jobId=&providerId=&secret=`
+
+- Takes three query parameters: `jobId`, `providerId`, and `secret`
+- If the job is active and has been assigned to this provider (authenticated with `secret`), fetches and returns the JSON benchmark file
 
 ## Benchmark File Format
 
@@ -162,3 +173,17 @@ A benchmark is a JSON file consisting of a single object. The properties of this
 ## Quick Testing from Client
 
 The `/dev-sandbox` path on the client (component in `apps/web/src/app/components/dev-sandbox.tsx`) is designed to be a quick, minimal way to test client-convex interaction. Feel free to edit it
+
+## Setting up Evaluations
+
+1. Upload a benchmark from the frontend
+1. Create a model from the Convex dashboard
+1. Register two providers from the frontend
+   - You will be barred from making another until you approve the first one (see next step)
+   - Payout is not currently implemented, but you should probably choose two addresses output from anvil as the providers' wallet addresses
+1. For each provider, set `approved` to `true` from the Convex dashboard
+1. For each provider, from the frontend, set max jobs and set status to `ready`
+   - The backend cannot currently mark jobs as complete, so for testing set max jobs to 20
+1. From the frontend, create a job with the benchmarkId and modelId
+1. From the frontend, fund the job
+   - You need to first connect your "wallet" via entering a private key output from anvil

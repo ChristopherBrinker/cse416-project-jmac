@@ -401,16 +401,20 @@ export default function DevSandbox() {
               <div>Price: {j.price}</div>
               <div>Status: {j.status}</div>
               <div>
-                {blockchainClient ? (
-                  <button
-                    type="button"
-                    style={{ backgroundColor: "ButtonFace" }}
-                    onClick={() => fundJob(j._id)}
-                  >
-                    Fund
-                  </button>
+                {j.status === "created" ? (
+                  blockchainClient ? (
+                    <button
+                      type="button"
+                      style={{ backgroundColor: "ButtonFace" }}
+                      onClick={() => fundJob(j._id)}
+                    >
+                      Fund
+                    </button>
+                  ) : (
+                    "Connect wallet to fund jobs"
+                  )
                 ) : (
-                  "Connect wallet to fund jobs"
+                  ""
                 )}
               </div>
             </div>
