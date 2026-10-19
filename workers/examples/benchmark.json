@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "name": "Worker scoring example",
+  "description": "Three simple questions for validating the local scoring pipeline.",
+  "version": "1.0.0",
+  "items": [
+    {
+      "item_id": "arithmetic",
+      "prompt": "What is 2 + 2?",
+      "choices": ["3", "4", "5"],
+      "correct_choice": 1
+    },
+    {
+      "item_id": "capital",
+      "prompt": "What is the capital of France?",
+      "choices": ["Berlin", "Madrid", "Paris"],
+      "correct_choice": 2
+    },
+    {
+      "item_id": "comparison",
+      "prompt": "Which number is larger?",
+      "choices": ["2", "9"],
+      "correct_choice": 1
+    }
+  ]
+}
