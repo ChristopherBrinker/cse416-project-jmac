@@ -144,7 +144,7 @@ export const setStatus = mutation({
       return { success: false, error: "Job not found" };
     }
 
-    if (job.status === "failure" || job.status !== "success") {
+    if (job.status === "failure" || job.status === "success") {
       return {
         success: false,
         error: "Job is already in a final state",
