@@ -1,6 +1,6 @@
 # JMAC — Private AI Benchmarking
 
-JMAC is our CSE 416 project for private AI benchmarking. The repository currently provides the web application, authentication, and a typed backend connection. Benchmark evaluation, Python workers, and Solidity contracts are planned but are not implemented yet.
+JMAC is our CSE 416 project for private AI benchmarking. The repository provides the web application, authentication, a typed backend connection, and a Docker-packaged Python benchmark evaluator with provider readiness and heartbeats. Provider job orchestration and Solidity contracts are not implemented yet. See the [worker guide](workers/README.md) for pinned local model inference, provider setup, scoring, and repeatability checks.
 
 The application uses Next.js App Router and TypeScript, Convex for the backend, and Better Auth for email/password authentication through the supported Convex component. Bun workspaces and Turborepo manage the monorepo; Ultracite with Oxlint/Oxfmt and Lefthook handle code checks.
 
@@ -89,7 +89,7 @@ packages/backend/     Convex functions, schema, auth configuration, generated AP
 packages/ui/          Shared UI components and styles
 packages/config/      Shared TypeScript configuration
 contracts/            Planned Foundry workspace
-workers/              Planned Python/Docker evaluation workers
+workers/              Python/Docker evaluation, pinned model inference, and tests
 ```
 
 The frontend imports the generated, typed Convex API from the backend workspace. Commit Convex `_generated` files and regenerate them with Convex tooling; lint and formatting exclude these generated files. Varlock generates `apps/web/src/env.ts` during installation, and that file is ignored.
