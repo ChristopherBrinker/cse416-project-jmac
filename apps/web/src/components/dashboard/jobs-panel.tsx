@@ -241,7 +241,7 @@ export function JobsPanel({
   );
 
   return (
-    <Card className="gap-0 pb-0">
+    <Card className="gap-0 rounded-xl pb-0">
       <CardHeader className="gap-3 border-b pb-4">
         <div className="space-y-1">
           <CardTitle>Evaluation jobs</CardTitle>

@@ -118,11 +118,13 @@ export function NewEvaluationDialog({ onCreate }: NewEvaluationDialogProps) {
         }
       }}
     >
-      <DialogTrigger render={<Button size="lg" />}>
+      <DialogTrigger
+        render={<Button className="w-fit rounded-full px-4" size="lg" />}
+      >
         <PlusIcon data-icon="inline-start" />
         New evaluation
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="rounded-xl sm:max-w-lg">
         <form onSubmit={handleSubmit} noValidate className="grid gap-5">
           <DialogHeader>
             <DialogTitle>Start a new evaluation</DialogTitle>
@@ -168,7 +170,7 @@ export function NewEvaluationDialog({ onCreate }: NewEvaluationDialogProps) {
               <SelectTrigger id={`${fieldId}-benchmark`} className="w-full">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-lg">
                 {BENCHMARK_ITEMS.map((item) => (
                   <SelectItem key={item.value} value={item.value}>
                     {item.label}
@@ -191,7 +193,7 @@ export function NewEvaluationDialog({ onCreate }: NewEvaluationDialogProps) {
             }
           >
             <legend className="mb-2 text-xs">Providers</legend>
-            <div className="bg-border grid gap-px border sm:grid-cols-2">
+            <div className="bg-border grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2">
               {PROVIDER_MODELS.map((model) => (
                 <Label
                   key={model.id}

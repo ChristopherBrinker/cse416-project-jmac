@@ -45,7 +45,7 @@ const OUTCOME_LABELS: Record<RecoveryOutcome, string> = {
 export function RecoveryTimeline({ job }: { job: EvaluationJob }) {
   if (job.recoveryAttempts.length === 0) {
     return (
-      <Empty className="border py-8">
+      <Empty className="rounded-lg border py-8">
         <EmptyHeader>
           <EmptyMedia variant="icon">
             <ShieldCheckIcon />

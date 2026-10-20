@@ -87,7 +87,7 @@ export function JobDetail({ job }: { job: EvaluationJob }) {
   const progress = Math.round(getJobProgress(job) * PERCENT);
 
   return (
-    <Card className="gap-4">
+    <Card className="gap-4 rounded-xl">
       <CardHeader className="gap-2 border-b">
         <div className="flex flex-wrap items-center gap-2">
           <JobStatusBadge status={job.status} />
@@ -105,7 +105,7 @@ export function JobDetail({ job }: { job: EvaluationJob }) {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <dl className="bg-border grid grid-cols-2 gap-px border">
+        <dl className="bg-border grid grid-cols-2 gap-px overflow-hidden rounded-lg border">
           <SummaryItem label="Top score">
             {top ? (
               <span className="flex items-baseline gap-1.5">
@@ -148,7 +148,7 @@ export function JobDetail({ job }: { job: EvaluationJob }) {
         {job.failureReason ? (
           <div
             role="alert"
-            className="border-destructive/30 bg-destructive/5 text-destructive flex gap-2 border p-3"
+            className="border-destructive/30 bg-destructive/5 text-destructive flex gap-2 rounded-lg border p-3"
           >
             <CircleAlertIcon className="mt-0.5 size-4 shrink-0" />
             <p>{job.failureReason}</p>

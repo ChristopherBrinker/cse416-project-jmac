@@ -100,7 +100,7 @@ export function StatsOverview({ jobs }: { jobs: EvaluationJob[] }) {
       className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
     >
       {stats.map(({ label, value, detail, icon: Icon }) => (
-        <Card key={label} size="sm">
+        <Card key={label} size="sm" className="rounded-xl">
           <CardHeader className="grid-cols-[1fr_auto]">
             <CardTitle className="text-muted-foreground text-xs font-medium">
               {label}

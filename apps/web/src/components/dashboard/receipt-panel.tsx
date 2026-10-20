@@ -52,7 +52,7 @@ function ReceiptDetails({ receipt }: { receipt: Receipt }) {
         <p className="text-muted-foreground font-mono">{receipt.id}</p>
         <ReceiptStatusBadge status={receipt.status} />
       </div>
-      <dl className="divide-y border">
+      <dl className="divide-y overflow-hidden rounded-lg border">
         <ReceiptRow label="Result digest">
           <HashValue value={receipt.resultDigest} label="Result digest" />
         </ReceiptRow>
@@ -106,7 +106,7 @@ function MissingReceipt({ job }: { job: EvaluationJob }) {
   }
 
   return (
-    <Empty className="border py-8">
+    <Empty className="rounded-lg border py-8">
       <EmptyHeader>
         <EmptyMedia variant="icon">{icon}</EmptyMedia>
         <EmptyTitle>{title}</EmptyTitle>

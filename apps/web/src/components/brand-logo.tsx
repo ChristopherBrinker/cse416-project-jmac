@@ -20,10 +20,9 @@ export function BrandLogo({
 }: BrandLogoProps) {
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
-      {/* The mark is drawn in near-black, so it keeps a light tile in dark mode. */}
       <span
         className={cn(
-          "ring-foreground/10 flex shrink-0 items-center justify-center bg-white ring-1",
+          "flex shrink-0 items-center justify-center",
           size === "sm" ? "size-8" : "size-12"
         )}
       >
@@ -32,7 +31,10 @@ export function BrandLogo({
           alt={showName ? "" : PRODUCT_NAME}
           width={LOGO_WIDTH}
           height={LOGO_HEIGHT}
-          className={size === "sm" ? "h-5 w-auto" : "h-8 w-auto"}
+          className={cn(
+            "dark:hue-rotate-180 dark:invert",
+            size === "sm" ? "h-5 w-auto" : "h-8 w-auto"
+          )}
           priority
         />
       </span>

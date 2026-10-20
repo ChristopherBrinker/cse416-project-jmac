@@ -9,6 +9,9 @@ import { BrandLogo } from "./brand-logo";
 import { ModeToggle } from "./mode-toggle";
 import UserMenu from "./user-menu";
 
+const NAV_LINK_CLASS_NAME =
+  "text-muted-foreground hover:bg-muted hover:text-foreground rounded-full px-4 py-2 text-xs font-medium tracking-wider uppercase outline-offset-4 transition-colors";
+
 export default function Header() {
   const pathname = usePathname();
   const { data: session } = authClient.useSession();
@@ -35,7 +38,7 @@ export default function Header() {
                 href={to}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  "text-muted-foreground hover:bg-muted hover:text-foreground rounded-full px-4 py-2 text-xs font-medium tracking-wider uppercase outline-offset-4 transition-colors",
+                  NAV_LINK_CLASS_NAME,
                   isActive && "bg-muted text-foreground"
                 )}
               >
@@ -51,7 +54,12 @@ export default function Header() {
           ) : (
             <Link
               href="/sign-in"
-              className="text-muted-foreground hover:text-foreground hidden rounded-full px-3 py-2 text-sm outline-offset-4 sm:inline-flex"
+              aria-current={pathname === "/sign-in" ? "page" : undefined}
+              className={cn(
+                NAV_LINK_CLASS_NAME,
+                "hidden sm:inline-flex",
+                pathname === "/sign-in" && "bg-muted text-foreground"
+              )}
             >
               Sign in
             </Link>
