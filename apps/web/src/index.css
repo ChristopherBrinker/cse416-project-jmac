@@ -1,7 +1,9 @@
 @import "@cse416-project-jmac/ui/globals.css";
 
 :root {
-  --brand: oklch(0.55 0.23 264);
+  --brand: #744c70;
+  --brand-foreground: #ffffff;
+  --brand-hover: #603e5d;
 }
 
 :root:not(.dark) {
@@ -10,9 +12,13 @@
 }
 
 .dark {
-  --brand: oklch(0.66 0.19 264);
+  --brand: #c7a3c4;
+  --brand-foreground: #211a23;
+  --brand-hover: #d6b7d3;
 }
 
 @theme inline {
   --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-hover: var(--brand-hover);
 }

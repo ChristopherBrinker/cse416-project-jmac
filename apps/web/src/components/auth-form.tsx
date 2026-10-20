@@ -125,7 +125,7 @@ export default function AuthForm({ signUp = false }: { signUp?: boolean }) {
           </p>
         )}
         <Button
-          className="focus-visible:ring-offset-background h-12 w-full justify-between gap-4 rounded-lg bg-[#744c70] px-5 text-sm text-white hover:bg-[#603e5d] focus-visible:ring-2 focus-visible:ring-[#744c70] focus-visible:ring-offset-2 dark:bg-[#c7a3c4] dark:text-[#211a23] dark:hover:bg-[#d6b7d3] dark:focus-visible:ring-[#c7a3c4]"
+          className="bg-brand text-brand-foreground hover:bg-brand-hover focus-visible:ring-brand focus-visible:ring-offset-background h-12 w-full justify-between gap-4 rounded-lg px-5 text-sm focus-visible:ring-2 focus-visible:ring-offset-2"
           type="submit"
           disabled={pending}
         >

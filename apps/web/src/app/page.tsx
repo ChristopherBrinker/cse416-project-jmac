@@ -45,7 +45,7 @@ export default function Home() {
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3 border-t pt-7 sm:mt-10 sm:pt-8">
             <Button
-              className="focus-visible:ring-offset-background h-12 gap-5 rounded-lg bg-[#744c70] px-6 text-sm text-white hover:bg-[#603e5d] focus-visible:ring-2 focus-visible:ring-[#744c70] focus-visible:ring-offset-2 dark:bg-[#c7a3c4] dark:text-[#211a23] dark:hover:bg-[#d6b7d3] dark:focus-visible:ring-[#c7a3c4]"
+              className="bg-brand text-brand-foreground hover:bg-brand-hover focus-visible:ring-brand focus-visible:ring-offset-background h-12 gap-5 rounded-lg px-6 text-sm focus-visible:ring-2 focus-visible:ring-offset-2"
               size="lg"
               nativeButton={false}
               render={<Link href="/dashboard" />}
