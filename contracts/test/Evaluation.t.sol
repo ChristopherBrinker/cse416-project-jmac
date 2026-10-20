@@ -145,4 +145,35 @@ contract EvaluationCommitTest is Test {
         vm.prank(providerA);
         evaluation.commitResult("job2", COMMIT_A);
     }
+
+    function test_RevertWhen_ProvidersAreTheSameAddress() public {
+        fundJob();
+
+        vm.prank(backend);
+        vm.expectRevert("Providers must be distinct");
+        evaluation.assignProviders(JOB_ID, providerA, "pA", providerA, "pA");
+    }
+
+    function test_RevertWhen_ProvidersAlreadyAssigned() public {
+        fundAndAssign();
+
+        vm.prank(backend);
+        vm.expectRevert("Providers already assigned");
+        evaluation.assignProviders(JOB_ID, providerA, "pA", outsider, "pC");
+    }
+
+    function test_ReassignmentCannotResetCommits() public {
+        fundAndAssign();
+
+        vm.prank(providerA);
+        evaluation.commitResult(JOB_ID, COMMIT_A);
+
+        vm.prank(backend);
+        vm.expectRevert("Providers already assigned");
+        evaluation.assignProviders(JOB_ID, providerA, "pA", providerB, "pB");
+
+        vm.prank(providerA);
+        vm.expectRevert("Already committed");
+        evaluation.commitResult(JOB_ID, COMMIT_B);
+    }
 }

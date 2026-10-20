@@ -48,9 +48,12 @@ contract Evaluation {
         require(msg.sender == backend, "Unauthorized");
         require(addressA != address(0), "Invalid address");
         require(addressB != address(0), "Invalid address");
+        require(addressA != addressB, "Providers must be distinct");
 
         Job memory j = jobs[jobId];
         require(j.flag, "Job not found");
+        // reassigning would reset commits already submitted
+        require(!j.providerA.flag && !j.providerB.flag, "Providers already assigned");
 
         Provider memory providerA = Provider({
             addr: addressA,
