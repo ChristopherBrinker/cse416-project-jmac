@@ -45,9 +45,6 @@ export default function AuthForm({ signUp = false }: { signUp?: boolean }) {
   return (
     <main className="mx-auto grid w-full max-w-7xl items-center gap-10 px-5 py-14 sm:gap-14 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-20">
       <div>
-        <p className="text-muted-foreground mb-7 text-xs font-medium tracking-[0.18em] uppercase">
-          Private data. Clear comparisons.
-        </p>
         <h1 className="max-w-xl text-4xl leading-[1.06] font-semibold tracking-[-0.045em] text-balance sm:text-6xl">
           {signUp ? "Your next benchmark starts here." : "Welcome back."}
         </h1>
@@ -128,7 +125,7 @@ export default function AuthForm({ signUp = false }: { signUp?: boolean }) {
           </p>
         )}
         <Button
-          className="h-12 w-full justify-between gap-4 rounded-lg bg-[#1558f5] px-5 text-sm text-white hover:bg-[#124bd1]"
+          className="focus-visible:ring-offset-background h-12 w-full justify-between gap-4 rounded-lg bg-[#744c70] px-5 text-sm text-white hover:bg-[#603e5d] focus-visible:ring-2 focus-visible:ring-[#744c70] focus-visible:ring-offset-2 dark:bg-[#c7a3c4] dark:text-[#211a23] dark:hover:bg-[#d6b7d3] dark:focus-visible:ring-[#c7a3c4]"
           type="submit"
           disabled={pending}
         >
