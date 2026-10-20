@@ -1,25 +1,26 @@
 # Worker integration handoff
 
-The `0.3.0` worker runs the pinned model, scores benchmarks, produces repeatable local results, and manages provider presence. Completing a job from the backend is the next MVP milestone. The requirements below are a handoff for that integration, not implemented API endpoints.
+The `0.3.0` worker runs the pinned model, scores benchmarks, produces repeatable local results, and manages provider presence. Completing a job from the backend is the next MVP milestone. This handoff distinguishes the available interfaces from the remaining integration requirements.
 
 ## Current boundary
 
-Checked against backend commit `69ab12d`:
+Checked against main commit `9bd8c8d`:
 
 - `provider:setStatus` and `provider:heartbeat` accept a registered provider ID and secret. The worker implements these calls, loads and warms the model before becoming ready, and attempts offline cleanup on shutdown.
-- `job:createJob` creates the user's job record. It does not deliver work to a provider.
-- There is no assignment table/API, authorized benchmark download, or result submission API. The [backend guide](../packages/backend/README.md) explicitly describes the assignment and download gaps.
-- The contracts workspace is planned; commit/reveal calls cannot yet be wired to a deployed contract.
+- The scheduler observes `JobFunded`, calls `job:assignProviders`, and submits the selected providers to the contract. The backend stores `job_assignments` and exposes `job:getJobsForProvider` using the provider ID and secret.
+- The backend exposes an assignment-authorized `GET /benchmark?jobId=&providerId=&secret=` download. The worker does not yet query assignments or download their benchmarks. See the [backend guide](../packages/backend/README.md).
+- `contracts/src/Evaluation.sol` implements funding, provider assignment, and `commitResult(jobId, bytes32)`. It stores one nonzero commitment per assigned provider and emits `CommitComplete` once both are stored. It has a `bool[]` result field, but no reveal/comparison, `JobComplete`/`JobFailed`, refund, or payout functions.
+- ABIs and local deployment instructions exist. The worker has no wallet configuration or contract calls, so merging these files does not connect the worker to a blockchain.
 
 Local unit tests and real-model lifecycle checks against a Convex-compatible HTTP stub pass. Authentication against an actual deployment still needs a registered provider's credentials; no live deployment verification has been performed.
 
 ## Backend handoff
 
-The backend owner needs to expose provider-authorized work delivery and benchmark access. Agree on the function names and wire format before implementing the worker adapter. The minimum information and behavior needed are:
+Provider-authorized work delivery and benchmark access now exist. The worker adapter can target those interfaces; the remaining information and behavior to coordinate with the backend owner are:
 
 - An assignment identifier, job identifier, assigned provider, benchmark identifier and original-file SHA-256 hash, and model identifier with an immutable revision. A model display name alone cannot select a reproducible runner.
-- A way for the authenticated provider to obtain only its active assignments, with deadlines and the conditions for accepting or losing an assignment. Start with one concurrent job per provider.
-- Assignment-scoped access to the private benchmark's original bytes, preserving the uploaded content hash. The worker must verify that hash before evaluation; parsing and reserializing the JSON changes the bytes.
+- Job/benchmark/model metadata for each assignment: `job:getJobsForProvider` currently returns assignment records containing the job ID, without the benchmark hash or model metadata. Define how the worker obtains those values, deadlines, and conditions for losing an assignment. Start with one concurrent job per provider.
+- Preserve the original benchmark bytes returned by the download and verify their expected content hash before evaluation; parsing and reserializing the JSON changes the bytes. Keep the existing download's query-string secret out of logs and error messages.
 - Defined behavior for retries, duplicate delivery, restarts, cancellation, and expiry so a repeated request cannot create a second logical execution or complete an expired assignment.
 - A way to report execution failure and retrieve the authoritative job/assignment state. Decide how result artifacts are stored and authorized separately from on-chain settlement.
 - Missing-heartbeat handling so a killed or unreachable worker eventually stops receiving work.
@@ -28,14 +29,14 @@ For the first model, map the backend model record to `HuggingFaceTB/SmolLM2-135M
 
 ## Contract handoff
 
-The registry/escrow owner needs to provide the deployed chain/address, ABI, assigned-provider rules, and commit/reveal deadlines. Agree on these result-policy details before adding transaction code:
+The registry/escrow owner has supplied the initial contract and ABIs. Deployment configuration, commit/reveal deadlines, and the rest of the result lifecycle still need agreement before adding worker transaction code:
 
-- The exact result fields compared between providers, including whether the ordered integer score vector is authoritative. Worker metadata varies across machines and should not accidentally become part of result agreement.
+- The requested contract result is the ordered boolean score vector (`[true, false, ...]`). The worker currently writes integer scores (`[1, 0, ...]`), so the adapter must convert them. Worker metadata varies across machines and should not accidentally become part of result agreement.
 - Canonical encoding, hash algorithm, and any salt or job/provider binding used for commitments. The current local JSON file is not a commitment format.
-- The representation of the total score. The worker already supplies integer `correct` and `total` values plus a floating-point `accuracy`; the contract policy must choose its representation explicitly.
+- A reveal function that hashes the supplied boolean array, validates it against that provider's commitment, and compares both revealed arrays. Matching arrays should enable completion and separate payout claims; disagreement should enable failure and a separate refund. These functions and events are not yet implemented.
 - How workers observe commit completion, reveal results, handle failed transactions or expired jobs, and request payment. Confirm which responsibilities belong in the worker and which belong in the backend.
 
-## Worker work after those interfaces exist
+## Remaining worker work
 
 1. Add an adapter for the agreed assignment and download APIs, authenticated with the provider's secret.
 2. Check assignment ownership, deadlines, model revision, and benchmark hash; reject unsupported or changed inputs before inference.
@@ -54,4 +55,4 @@ The registry/escrow owner needs to provide the deployed chain/address, ABI, assi
 
 ## Message for the team
 
-> The worker and Docker package are ready for local evaluation, and provider readiness/heartbeats are implemented. To connect real jobs, I need provider-authorized assignments, an assignment-scoped download of the original benchmark bytes with its SHA-256 hash, and an immutable model mapping. For on-chain results, I also need the ABI/deployment and agreed commitment encoding, score comparison, and deadlines. Once those interfaces exist I can wire the worker into the full job flow. Live provider authentication is still unverified.
+> The worker and Docker package are ready for local evaluation, and provider readiness/heartbeats are implemented. Main now has assignments, authorized benchmark downloads, and contract commitments. The worker still needs adapters for those APIs, job metadata with the expected benchmark hash and pinned model mapping, and conversion of integer scores to boolean arrays. Reveal/comparison, refunds, payouts, and the exact commitment encoding/deadlines remain contract work. Live provider authentication is still unverified.

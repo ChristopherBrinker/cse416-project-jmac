@@ -26,6 +26,7 @@
     "react-dom": "catalog:",
     "sonner": "catalog:",
     "varlock": "catalog:",
+    "viem": "^2.57.7",
     "zod": "catalog:"
   },
   "devDependencies": {

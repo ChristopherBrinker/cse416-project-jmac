@@ -48,7 +48,7 @@ Secrets are sent only in the mutation body over HTTPS (HTTP is allowed only for 
 
 If the backend is unreachable or the process is forcibly killed, offline status cannot be guaranteed. The current backend does not yet schedule missing-heartbeat disconnection checks. Failed cleanup logs an explicit offline-status error so an operator can check the provider record.
 
-This mode manages presence only. Job assignments, authorized benchmark downloads, and result/contract submission are still unavailable in the backend, so the loop does not request or execute jobs.
+This mode manages presence only. The backend now exposes `job:getJobsForProvider` and an authorized `GET /benchmark` download, but the worker does not yet call either interface or execute assigned jobs. The Evaluation contract accepts result-hash commitments; the worker makes no contract calls, and reveal, result comparison, refunds, and payouts are not yet implemented.
 
 The [integration handoff](INTEGRATION.md) lists the backend and contract interfaces needed next, the remaining worker tasks, and the acceptance checks for a complete MVP job.
 
@@ -184,7 +184,7 @@ Predictions are a JSON array of zero-based integer choice indices, one per item 
 
 Results include the result schema version, benchmark name/version and SHA-256 content hash, ordered item IDs, predictions, scores, correct count, total, and accuracy. Model runs additionally include an `inference` metadata object. The benchmark hash covers the original file bytes, matching the backend upload hash; whitespace changes the hash.
 
-Results omit prompts, choices, and the answer key, but per-item predictions and scores should still be treated as private evaluation data. This JSON format is local to the worker and is not yet a contract submission or commitment format. Malformed inputs, missing files/model dependencies, inference failures, and context-limit violations return a nonzero exit code. Validation and inference finish before writing the output file. The output cannot be either input file.
+Results omit prompts, choices, and the answer key, but per-item predictions and scores should still be treated as private evaluation data. This JSON format is local to the worker and is not yet a contract submission or commitment format. Local scores are integers (`[1, 0, ...]`); the contract's result field is `bool[]` (`[true, false, ...]`). A future adapter must convert the ordered score vector and use the agreed contract encoding and hash algorithm, rather than hashing the local JSON or its benchmark SHA-256. Malformed inputs, missing files/model dependencies, inference failures, and context-limit violations return a nonzero exit code. Validation and inference finish before writing the output file. The output cannot be either input file.
 
 ## Development checks
 
@@ -212,4 +212,4 @@ PYTHONPATH=. .venv/bin/python scripts/verify-provider.py \
 
 This uses cached model files and a local Convex-compatible HTTP stub. It starts real provider subprocesses, injects a temporary HTTP 503 failure, checks successful heartbeats, sends SIGTERM and SIGINT, and verifies offline cleanup and secret-safe logs. It needs permission to open a loopback port. This verifies transport and lifecycle against the current API contract, not authentication against a deployed Convex project. Live verification needs an actual registered provider ID and secret in `.env.provider`.
 
-Benchmark validation lives in `jmac_worker/benchmark.py`, model inference in `jmac_worker/inference.py`, and scoring in `jmac_worker/scoring.py`. Provider transport is in `jmac_worker/provider_api.py`; the lifecycle is in `jmac_worker/provider.py`. Backend assignments/downloads and contract commit/reveal integration are subsequent milestones.
+Benchmark validation lives in `jmac_worker/benchmark.py`, model inference in `jmac_worker/inference.py`, and scoring in `jmac_worker/scoring.py`. Provider transport is in `jmac_worker/provider_api.py`; the lifecycle is in `jmac_worker/provider.py`. Connecting the worker to the existing assignment/download APIs and implementing contract commit/reveal integration are subsequent milestones.

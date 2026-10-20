@@ -1,7 +1,13 @@
 import { v, ConvexError } from "convex/values";
 
 import { internal } from "./_generated/api";
-import { internalMutation, query, httpAction } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import {
+  internalMutation,
+  internalQuery,
+  query,
+  httpAction,
+} from "./_generated/server";
 
 const validateBenchmark = (
   benchmark: any
@@ -270,5 +276,114 @@ export const getBenchmarks = query({
       });
     }
     return result;
+  },
+});
+
+export const getBenchmarkFile = httpAction(async (ctx, request) => {
+  const siteUrl = process.env.SITE_URL;
+  if (!siteUrl) {
+    throw new Error("Set SITE_URL on the Convex deployment");
+  }
+
+  const baseURL = `http://${request.headers.get("host")}`;
+  const parsedUrl = new URL(request.url, baseURL);
+
+  const jobId = parsedUrl.searchParams.get("jobId");
+  const providerId = parsedUrl.searchParams.get("providerId");
+  const secret = parsedUrl.searchParams.get("secret");
+  if (!jobId || !providerId || !secret) {
+    return new Response(JSON.stringify({ error: "Invalid query parameters" }), {
+      status: 400,
+      headers: new Headers({
+        "Access-Control-Allow-Origin": siteUrl,
+        "Content-Type": "application/json",
+        Vary: "origin",
+      }),
+    });
+  }
+
+  try {
+    const verified = await ctx.runQuery(
+      internal.benchmark.verifyBenchmarkAccess,
+      {
+        jobId: jobId as Id<"jobs">,
+        providerId: providerId as Id<"providers">,
+        secret,
+      }
+    );
+    if (!verified.success || !verified.storageId) {
+      return new Response(JSON.stringify({ error: verified.error }), {
+        status: 400,
+        headers: new Headers({
+          "Access-Control-Allow-Origin": siteUrl,
+          "Content-Type": "application/json",
+          Vary: "origin",
+        }),
+      });
+    }
+
+    const blob = await ctx.storage.get(verified.storageId);
+    if (blob === null) {
+      return new Response(
+        JSON.stringify({ error: "Benchmark file not found" }),
+        {
+          status: 404,
+          headers: new Headers({
+            "Access-Control-Allow-Origin": siteUrl,
+            "Content-Type": "application/json",
+            Vary: "origin",
+          }),
+        }
+      );
+    }
+
+    return new Response(blob);
+  } catch (error) {
+    console.log(error);
+    return new Response(JSON.stringify({ error: "Unknown error" }), {
+      status: 500,
+      headers: new Headers({
+        "Access-Control-Allow-Origin": siteUrl,
+        "Content-Type": "application/json",
+        Vary: "origin",
+      }),
+    });
+  }
+});
+
+export const verifyBenchmarkAccess = internalQuery({
+  args: {
+    jobId: v.id("jobs"),
+    providerId: v.id("providers"),
+    secret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get("jobs", args.jobId);
+    if (!job) {
+      return { success: false, error: "Job not found" };
+    }
+    const provider = await ctx.db.get("providers", args.providerId);
+    if (!provider || provider.secret !== args.secret) {
+      return { success: false, error: "Invalid provider id or secret" };
+    }
+
+    const assignment = await ctx.db
+      .query("job_assignments")
+      .withIndex("by_jobId_providerId_finished", (q) =>
+        q
+          .eq("jobId", job._id)
+          .eq("providerId", provider._id)
+          .eq("finished", false)
+      )
+      .unique();
+    if (!assignment) {
+      return { success: false, error: "Provider not assigned to this job" };
+    }
+
+    const benchmark = await ctx.db.get("benchmarks", job.benchmarkId);
+    if (!benchmark) {
+      return { success: false, error: "Benchmark not found for this job" };
+    }
+    return { success: true, storageId: benchmark.storageId };
   },
 });
