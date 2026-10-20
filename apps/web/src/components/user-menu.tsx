@@ -1,5 +1,14 @@
 "use client";
 
+import { Button } from "@cse416-project-jmac/ui/components/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@cse416-project-jmac/ui/components/dropdown-menu";
+import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -30,27 +39,46 @@ export default function UserMenu() {
   };
 
   return (
-    <div>
-      <details className="relative w-fit">
-        <summary
-          aria-label="Account menu"
-          className="bg-muted flex size-7 cursor-pointer list-none items-center justify-center rounded-full text-sm font-medium"
-        >
-          {session?.user.name.slice(0, 1).toUpperCase() ?? "U"}
-        </summary>
-        <div className="bg-background absolute z-10 mt-2 w-64 space-y-2 rounded border p-3 shadow">
-          <p className="truncate text-sm">{session?.user.email}</p>
-          <button
-            type="button"
-            className="rounded border px-3 py-1 text-sm"
-            disabled={pending}
-            onClick={signOut}
-          >
-            {pending ? "Signing out…" : "Sign out"}
-          </button>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label="Account menu"
+            variant="ghost"
+            size="icon"
+            className="bg-muted size-9 rounded-full"
+          />
+        }
+      >
+        {session?.user.name.slice(0, 1).toUpperCase() ?? "U"}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        sideOffset={8}
+        className="w-64 rounded-xl p-1.5"
+      >
+        <div className="space-y-1 px-3 py-2.5 text-xs">
+          <p className="truncate font-medium">{session?.user.name}</p>
+          <p className="text-muted-foreground truncate">
+            {session?.user.email}
+          </p>
         </div>
-      </details>
-      {error && <p role="alert">{error}</p>}
-    </div>
+        <DropdownMenuSeparator className="mx-1 my-1" />
+        <DropdownMenuItem
+          className="rounded-lg px-3 py-2.5 font-medium"
+          disabled={pending}
+          closeOnClick={false}
+          onClick={signOut}
+        >
+          <LogOut aria-hidden="true" />
+          {pending ? "Signing out…" : "Sign out"}
+        </DropdownMenuItem>
+        {error && (
+          <p role="alert" className="text-destructive px-3 py-2 text-xs">
+            {error}
+          </p>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

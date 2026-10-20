@@ -1,5 +1,9 @@
 "use client";
 
+import { Button } from "@cse416-project-jmac/ui/components/button";
+import { Input } from "@cse416-project-jmac/ui/components/input";
+import { Label } from "@cse416-project-jmac/ui/components/label";
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -39,35 +43,66 @@ export default function AuthForm({ signUp = false }: { signUp?: boolean }) {
   };
 
   return (
-    <main className="mx-auto w-full max-w-3xl space-y-4 p-6">
-      <h1 className="text-2xl font-semibold">{title}</h1>
-      <form action={submit} className="max-w-sm space-y-4">
+    <main className="mx-auto grid w-full max-w-7xl items-center gap-10 px-5 py-14 sm:gap-14 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,1fr)_420px] lg:gap-20">
+      <div>
+        <p className="text-muted-foreground mb-7 text-xs font-medium tracking-[0.18em] uppercase">
+          Private data. Clear comparisons.
+        </p>
+        <h1 className="max-w-xl text-4xl leading-[1.06] font-semibold tracking-[-0.045em] text-balance sm:text-6xl">
+          {signUp ? "Your next benchmark starts here." : "Welcome back."}
+        </h1>
+        <p className="text-muted-foreground mt-6 max-w-md text-base leading-relaxed sm:text-lg">
+          {signUp
+            ? "Create an account to compare AI models on your private datasets."
+            : "Sign in to manage your evaluations and pick up where you left off."}
+        </p>
+      </div>
+      <form
+        action={submit}
+        aria-labelledby="auth-title"
+        aria-busy={pending}
+        className="bg-card w-full max-w-md space-y-5 rounded-xl border p-6 sm:p-8 lg:max-w-none"
+      >
+        <h2
+          id="auth-title"
+          className="mb-7 text-2xl font-semibold tracking-tight"
+        >
+          {title}
+        </h2>
         {signUp && (
           <div className="space-y-2">
-            <label htmlFor="name">Name</label>
-            <input
+            <Label htmlFor="name" className="text-sm">
+              Name
+            </Label>
+            <Input
               id="name"
               name="name"
               autoComplete="name"
+              placeholder="Your name"
               required
-              className="block w-full rounded border p-2"
+              className="h-12 rounded-lg px-4 text-base md:text-sm"
             />
           </div>
         )}
         <div className="space-y-2">
-          <label htmlFor="email">Email</label>
-          <input
+          <Label htmlFor="email" className="text-sm">
+            Email
+          </Label>
+          <Input
             id="email"
             name="email"
             type="email"
             autoComplete="email"
+            placeholder="you@example.com"
             required
-            className="block w-full rounded border p-2"
+            className="h-12 rounded-lg px-4 text-base md:text-sm"
           />
         </div>
         <div className="space-y-2">
-          <label htmlFor="password">Password</label>
-          <input
+          <Label htmlFor="password" className="text-sm">
+            Password
+          </Label>
+          <Input
             id="password"
             name="password"
             type="password"
@@ -75,21 +110,41 @@ export default function AuthForm({ signUp = false }: { signUp?: boolean }) {
             minLength={8}
             maxLength={128}
             required
-            className="block w-full rounded border p-2"
+            aria-describedby={signUp ? "password-hint" : undefined}
+            className="h-12 rounded-lg px-4 text-base md:text-sm"
           />
+          {signUp && (
+            <p id="password-hint" className="text-muted-foreground text-xs">
+              Use 8–128 characters.
+            </p>
+          )}
         </div>
-        {error && <p role="alert">{error}</p>}
-        <button
-          className="rounded border px-4 py-2"
+        {error && (
+          <p
+            role="alert"
+            className="border-destructive/30 bg-destructive/5 text-destructive rounded-lg border p-3 text-sm"
+          >
+            {error}
+          </p>
+        )}
+        <Button
+          className="h-12 w-full justify-between gap-4 rounded-lg bg-[#1558f5] px-5 text-sm text-white hover:bg-[#124bd1]"
           type="submit"
           disabled={pending}
         >
           {pending ? "Please wait…" : title}
-        </button>
+          <ArrowUpRight aria-hidden="true" />
+        </Button>
+        <p className="text-muted-foreground border-t pt-5 text-sm leading-6">
+          {signUp ? "Already have an account? " : "New here? "}
+          <Link
+            className="text-foreground rounded-sm font-medium underline underline-offset-4 outline-offset-4 hover:no-underline"
+            href={signUp ? "/sign-in" : "/sign-up"}
+          >
+            {signUp ? "Sign in" : "Create an account"}
+          </Link>
+        </p>
       </form>
-      <Link href={signUp ? "/sign-in" : "/sign-up"}>
-        {signUp ? "Already have an account? Sign in" : "Create an account"}
-      </Link>
     </main>
   );
 }

@@ -19,7 +19,7 @@ export function ProviderResults({ job }: { job: EvaluationJob }) {
   const results = job.providers.toSorted(byScoreDescending);
 
   return (
-    <ul className="divide-y border">
+    <ul className="divide-y overflow-hidden rounded-lg border">
       {results.map((result) => (
         <li key={result.id} className="space-y-2 p-3">
           <div className="flex items-start justify-between gap-3">

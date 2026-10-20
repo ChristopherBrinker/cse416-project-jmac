@@ -9,44 +9,61 @@ import { BrandLogo } from "./brand-logo";
 import { ModeToggle } from "./mode-toggle";
 import UserMenu from "./user-menu";
 
+const NAV_LINK_CLASS_NAME =
+  "text-muted-foreground hover:bg-muted hover:text-foreground rounded-full px-4 py-2 text-xs font-medium tracking-wider uppercase outline-offset-4 transition-colors";
+
 export default function Header() {
   const pathname = usePathname();
   const { data: session } = authClient.useSession();
   const links = [
-    { to: "/", label: "Home", className: "hidden sm:inline-flex" },
-    { to: "/dashboard", label: "Dashboard", className: "inline-flex" },
+    { to: "/", label: "Home" },
+    { to: "/dashboard", label: "Dashboard" },
   ] as const;
 
   return (
-    <header className="bg-background/85 supports-backdrop-filter:bg-background/70 sticky top-0 z-40 border-b backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6">
-        <div className="flex min-w-0 items-center gap-3 sm:gap-6">
-          <Link href="/" className="min-w-0">
-            <BrandLogo />
-          </Link>
-          <nav aria-label="Main" className="flex items-center gap-1">
-            {links.map(({ to, label, className }) => {
-              const isActive = pathname === to;
-              return (
-                <Link
-                  key={to}
-                  href={to}
-                  aria-current={isActive ? "page" : undefined}
-                  className={cn(
-                    "text-muted-foreground hover:text-foreground px-2.5 py-1.5 text-xs font-medium transition-colors",
-                    className,
-                    isActive && "bg-muted text-foreground"
-                  )}
-                >
-                  {label}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-        <div className="flex items-center gap-2">
+    <header className="bg-background sticky top-0 z-40 border-b">
+      <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3 sm:min-h-18 sm:flex-nowrap sm:px-6 sm:py-4">
+        <Link href="/" className="rounded-sm outline-offset-4">
+          <BrandLogo />
+        </Link>
+        <nav
+          aria-label="Main"
+          className="order-last flex w-full items-center gap-1 sm:order-none sm:w-auto"
+        >
+          {links.map(({ to, label }) => {
+            const isActive = pathname === to;
+            return (
+              <Link
+                key={to}
+                href={to}
+                aria-current={isActive ? "page" : undefined}
+                className={cn(
+                  NAV_LINK_CLASS_NAME,
+                  isActive && "bg-muted text-foreground"
+                )}
+              >
+                {label}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="ml-auto flex items-center gap-3">
           <ModeToggle />
-          {session && <UserMenu />}
+          {session ? (
+            <UserMenu />
+          ) : (
+            <Link
+              href="/sign-in"
+              aria-current={pathname === "/sign-in" ? "page" : undefined}
+              className={cn(
+                NAV_LINK_CLASS_NAME,
+                "hidden sm:inline-flex",
+                pathname === "/sign-in" && "bg-muted text-foreground"
+              )}
+            >
+              Sign in
+            </Link>
+          )}
         </div>
       </div>
     </header>

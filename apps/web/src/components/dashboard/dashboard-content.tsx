@@ -8,7 +8,6 @@ import { formatCount } from "@/lib/evaluations";
 import { MOCK_EVALUATION_JOBS, createQueuedJob } from "@/lib/mock-evaluations";
 import type { NewEvaluationInput } from "@/lib/mock-evaluations";
 
-import { BackendStatus } from "./backend-status";
 import { JobDetail } from "./job-detail";
 import { JobsPanel } from "./jobs-panel";
 import { NewEvaluationDialog } from "./new-evaluation-dialog";
@@ -52,10 +51,7 @@ export default function DashboardContent() {
             Benchmark models on private datasets and verify every result.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <BackendStatus />
-          <NewEvaluationDialog onCreate={createEvaluation} />
-        </div>
+        <NewEvaluationDialog onCreate={createEvaluation} />
       </div>
 
       <StatsOverview jobs={jobs} />
