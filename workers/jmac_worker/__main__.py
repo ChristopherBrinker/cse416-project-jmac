@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .benchmark import load_benchmark
 from .inference import DEFAULT_CACHE_DIRECTORY, MODEL_ALIAS, LocalModelRunner, Question
+from .output import atomic_output
 from .scoring import score_benchmark
 
 
@@ -43,24 +44,24 @@ def main() -> None:
             raise ValueError(
                 "Output must be different from the benchmark and predictions files"
             )
-        benchmark = load_benchmark(args.benchmark)
-        inference_metadata = None
-        if args.predictions is not None:
-            predictions = json.loads(args.predictions.read_text(encoding="utf-8"))
-        else:
-            questions = [
-                Question(item.item_id, item.prompt, item.choices)
-                for item in benchmark.items
-            ]
-            runner = LocalModelRunner(args.cache_dir, offline=args.offline)
-            predictions = runner.predict(questions)
-            inference_metadata = runner.metadata()
-        result = score_benchmark(benchmark, predictions)
-        document = result.to_dict()
-        if inference_metadata is not None:
-            document["inference"] = inference_metadata
-        output = json.dumps(document, indent=2, allow_nan=False) + "\n"
-        args.output.write_text(output, encoding="utf-8")
+        with atomic_output(args.output.resolve()) as output:
+            benchmark = load_benchmark(args.benchmark)
+            inference_metadata = None
+            if args.predictions is not None:
+                predictions = json.loads(args.predictions.read_text(encoding="utf-8"))
+            else:
+                questions = [
+                    Question(item.item_id, item.prompt, item.choices)
+                    for item in benchmark.items
+                ]
+                runner = LocalModelRunner(args.cache_dir, offline=args.offline)
+                predictions = runner.predict(questions)
+                inference_metadata = runner.metadata()
+            result = score_benchmark(benchmark, predictions)
+            document = result.to_dict()
+            if inference_metadata is not None:
+                document["inference"] = inference_metadata
+            output.write(json.dumps(document, indent=2, allow_nan=False) + "\n")
     except (OSError, ValueError, RuntimeError) as error:
         parser.exit(1, f"error: {error}\n")
 

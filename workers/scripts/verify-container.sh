@@ -7,6 +7,12 @@ worker_output_directory=${2:-"$worker_script_directory/../output"}
 
 mkdir -p "$worker_output_directory"
 worker_output_directory=$(CDPATH= cd -- "$worker_output_directory" && pwd)
+case "$worker_output_directory" in
+    *,*)
+        printf 'Output directory cannot contain commas in a Docker mount source.\n' >&2
+        exit 2
+        ;;
+esac
 # Resolve the tag once so both evaluations run the exact same image.
 worker_image_id=$(docker image inspect --format '{{.Id}}' "$worker_image")
 worker_platform=$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$worker_image_id")

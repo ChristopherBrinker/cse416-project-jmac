@@ -9,6 +9,9 @@
 !examples/*.json
 !tests/
 !tests/*.py
+!scripts/
+!scripts/*.py
+!scripts/*.sh
 !third_party/
 !third_party/*.md
 !third_party/*.txt

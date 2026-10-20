@@ -35,4 +35,5 @@ htmlcov/
 /private/
 /result.json
 /result-*.json
+.jmac-result-*.tmp
 /output/

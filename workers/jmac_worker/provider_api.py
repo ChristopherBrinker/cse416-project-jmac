@@ -24,7 +24,7 @@ class ProviderAPIError(RuntimeError):
 def validate_deployment_url(value: str) -> str:
     try:
         parsed = urlsplit(value)
-        hostname = parsed.hostname
+        hostname = (parsed.hostname or "").encode("idna").decode("ascii").rstrip(".")
         port = parsed.port
         if not hostname or parsed.username is not None or parsed.password is not None:
             raise ValueError
@@ -39,7 +39,7 @@ def validate_deployment_url(value: str) -> str:
             "CONVEX_URL must be a deployment origin without credentials or a path"
         ) from None
 
-    if hostname.endswith(".convex.site"):
+    if hostname == "convex.site" or hostname.endswith(".convex.site"):
         raise ValueError(
             "Use the .convex.cloud deployment URL, not the .convex.site HTTP actions URL"
         )
@@ -52,7 +52,10 @@ def validate_deployment_url(value: str) -> str:
         raise ValueError(
             "CONVEX_URL requires HTTPS, except for local loopback development"
         )
-    return urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+    netloc = f"[{hostname}]" if ":" in hostname else hostname
+    if port is not None:
+        netloc = f"{netloc}:{port}"
+    return urlunsplit((parsed.scheme, netloc, "", "", ""))
 
 
 @dataclass(frozen=True, slots=True)

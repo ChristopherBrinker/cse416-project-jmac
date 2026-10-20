@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
+from typing import NoReturn
 
 BENCHMARK_SCHEMA_VERSION = "1.0.0"
 
@@ -66,10 +67,19 @@ def _parse_item(value: object, index: int) -> BenchmarkItem:
     return BenchmarkItem(item_id, prompt, choices, answer)
 
 
+def _reject_json_constant(_value: str) -> NoReturn:
+    raise ValueError(
+        "Benchmark must use standard JSON numbers, without NaN or Infinity"
+    )
+
+
 def load_benchmark(path: Path) -> Benchmark:
     """Load a UTF-8 benchmark and hash its original bytes, as the backend does."""
     content = path.read_bytes()
-    document = _require_object(json.loads(content.decode("utf-8")), "benchmark")
+    document = _require_object(
+        json.loads(content.decode("utf-8"), parse_constant=_reject_json_constant),
+        "benchmark",
+    )
     if document.get("schema_version") != BENCHMARK_SCHEMA_VERSION:
         raise ValueError(f"schema_version must be {BENCHMARK_SCHEMA_VERSION}")
     name = _require_string(document.get("name"), "name", nonempty=True)

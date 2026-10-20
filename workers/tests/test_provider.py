@@ -3,10 +3,16 @@
 import io
 import json
 import signal
+import subprocess
+import sys
+import tempfile
+import time
 import unittest
+from pathlib import Path
 from threading import Event
 from unittest.mock import MagicMock, Mock, call, patch
 from urllib.error import HTTPError, URLError
+from urllib.request import HTTPRedirectHandler
 
 from jmac_worker.provider import (
     ModelStartupError,
@@ -62,6 +68,13 @@ class ProviderConfigurationTests(unittest.TestCase):
         for url in (
             "http://example.convex.cloud",
             "https://example.convex.site",
+            "https://example.convex.site.",
+            "https://EXAMPLE.CONVEX.SITE.:443/",
+            "https://example.convex.site..",
+            "https://example.convex.site\u3002",
+            "https://example.convex.site\uff0e",
+            "https://example.convex.site\uff61",
+            "https://convex.site.",
             "https://user:password@example.convex.cloud",
             "https://example.convex.cloud/path",
             f"https://example.convex.cloud?secret={SECRET}",
@@ -76,6 +89,16 @@ class ProviderConfigurationTests(unittest.TestCase):
                 with self.assertRaises(ValueError) as error:
                     ProviderConfig(url, "id", SECRET)
                 self.assertNotIn(SECRET, str(error.exception))
+
+    def test_normalizes_dns_trailing_dots_before_host_checks(self) -> None:
+        for url, expected in (
+            ("https://EXAMPLE.convex.cloud.:443/", "https://example.convex.cloud:443"),
+            ("http://localhost.:3210", "http://localhost:3210"),
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(
+                    ProviderConfig(url, "id", SECRET).deployment_url, expected
+                )
 
     def test_rejects_invalid_numbers_without_echoing_values(self) -> None:
         cases = {
@@ -196,8 +219,16 @@ class ProviderClientTests(unittest.TestCase):
         self.assertNotIn(SECRET, str(error.exception))
 
     def test_redirects_are_not_followed(self) -> None:
+        client = ProviderClient(config_from_environment(ENVIRONMENT))
+        handlers = [
+            handler
+            for handler in client._opener.handlers
+            if isinstance(handler, HTTPRedirectHandler)
+        ]
+        self.assertEqual(len(handlers), 1)
+        self.assertIsInstance(handlers[0], _NoRedirects)
         self.assertIsNone(
-            _NoRedirects().redirect_request(
+            handlers[0].redirect_request(
                 None, None, 302, "redirect", {}, "https://other.example"
             )
         )
@@ -233,10 +264,42 @@ class ProviderLifecycleTests(unittest.TestCase):
 
     def test_model_failure_never_marks_ready_and_attempts_offline(self) -> None:
         self.loader.side_effect = RuntimeError(SECRET)
-        with self.assertRaises(ModelStartupError) as error:
-            run_provider(self.config, self.client, self.loader, self.stop)
+        with self.assertLogs("jmac_worker.provider", level="ERROR") as logs:
+            with self.assertRaises(ModelStartupError) as error:
+                run_provider(self.config, self.client, self.loader, self.stop)
         self.assertNotIn(SECRET, str(error.exception))
+        self.assertIn("RuntimeError", "\n".join(logs.output))
+        self.assertNotIn(SECRET, "\n".join(logs.output))
         self.assertEqual(self.events, ["offline", "offline"])
+
+    def test_shutdown_before_startup_still_attempts_offline(self) -> None:
+        self.stop.is_set.return_value = True
+        run_provider(self.config, self.client, self.loader, self.stop)
+        self.assertEqual(self.events, ["offline"])
+        self.loader.assert_not_called()
+
+    def test_shutdown_after_load_skips_warmup_and_ready(self) -> None:
+        def load() -> Mock:
+            self.stop.is_set.return_value = True
+            return self.runner
+
+        self.loader.side_effect = load
+        run_provider(self.config, self.client, self.loader, self.stop)
+        self.runner.predict.assert_not_called()
+        self.assertEqual(self.events, ["offline", "offline"])
+
+    def test_shutdown_after_lost_startup_response_still_attempts_offline(self) -> None:
+        self.client.set_status.side_effect = [
+            ProviderAPIError("Unavailable.", retryable=True),
+            None,
+        ]
+        self.stop.wait.side_effect = [True]
+        with self.assertLogs("jmac_worker.provider", level="WARNING"):
+            run_provider(self.config, self.client, self.loader, self.stop)
+        self.assertEqual(
+            self.client.set_status.call_args_list, [call("offline"), call("offline")]
+        )
+        self.loader.assert_not_called()
 
     def test_shutdown_during_model_loading_skips_ready(self) -> None:
         self.runner.predict.side_effect = lambda _: setattr(
@@ -249,8 +312,9 @@ class ProviderLifecycleTests(unittest.TestCase):
         self.client.set_status.side_effect = ProviderAPIError(
             "Invalid provider credentials."
         )
-        with self.assertRaises(ProviderAPIError):
-            run_provider(self.config, self.client, self.loader, self.stop)
+        with self.assertLogs("jmac_worker.provider", level="ERROR"):
+            with self.assertRaises(ProviderAPIError):
+                run_provider(self.config, self.client, self.loader, self.stop)
         self.loader.assert_not_called()
         self.stop.wait.assert_not_called()
 
@@ -330,6 +394,81 @@ class ProviderLifecycleTests(unittest.TestCase):
             self.assertTrue(stop.is_set())
         for kind, handler in previous.items():
             self.assertEqual(signal.getsignal(kind), handler)
+
+
+class StartupSignalTests(unittest.TestCase):
+    def test_real_signals_interrupt_blocked_load_and_warmup_and_run_cleanup(
+        self,
+    ) -> None:
+        child = """
+import sys
+import time
+from pathlib import Path
+from threading import Event
+from jmac_worker.provider import run_provider, shutdown_signals
+from jmac_worker.provider_api import ProviderConfig
+
+phase, directory = sys.argv[1:]
+root = Path(directory)
+def block():
+    (root / "startup").write_text(phase)
+    while True:
+        try:
+            time.sleep(600)
+        except Exception:
+            continue
+class Client:
+    def set_status(self, status):
+        with (root / "statuses").open("a") as output:
+            output.write(status + "\\n")
+    def heartbeat(self):
+        pass
+class Runner:
+    def predict(self, questions):
+        if phase == "warmup":
+            block()
+def load():
+    if phase == "load":
+        block()
+    return Runner()
+stop = Event()
+with shutdown_signals(stop):
+    run_provider(ProviderConfig("http://localhost:3210", "test-provider", "test-secret"), Client(), load, stop)
+"""
+        for phase in ("load", "warmup"):
+            for stop_signal in (signal.SIGINT, signal.SIGTERM):
+                with self.subTest(phase=phase, stop_signal=stop_signal.name):
+                    with tempfile.TemporaryDirectory() as directory:
+                        root = Path(directory)
+                        process = subprocess.Popen(
+                            [sys.executable, "-c", child, phase, directory],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                        )
+                        try:
+                            deadline = time.monotonic() + 5
+                            while (
+                                not (root / "startup").exists()
+                                and process.poll() is None
+                                and time.monotonic() < deadline
+                            ):
+                                time.sleep(0.01)
+                            self.assertTrue(
+                                (root / "startup").exists(),
+                                "Child did not enter startup",
+                            )
+                            process.send_signal(stop_signal)
+                            logs, _ = process.communicate(timeout=3)
+                            self.assertEqual(process.returncode, 0, logs)
+                            self.assertEqual(
+                                (root / "statuses").read_text().splitlines(),
+                                ["offline", "offline"],
+                            )
+                        finally:
+                            if process.poll() is None:
+                                process.kill()
+                            process.communicate(timeout=3)
 
 
 class ProviderCommandTests(unittest.TestCase):

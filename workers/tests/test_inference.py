@@ -127,6 +127,9 @@ class InferenceTests(unittest.TestCase):
             inference_modes.append(torch.is_inference_mode_enabled())
             logits = torch.zeros((1, input_ids.shape[1], 6))
             logits[0, 1, 3] = 5.0
+            # Label 2 wins on its first token, but loses after its second token.
+            logits[0, 1, 4] = 6.0
+            logits[0, 2, 5] = -12.0
             return SimpleNamespace(logits=logits)
 
         self.model.side_effect = forward

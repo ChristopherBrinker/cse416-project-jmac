@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Event, Thread
+from time import monotonic
+from typing import TextIO
 
 from jmac_worker.inference import DEFAULT_CACHE_DIRECTORY, MODEL_ID, MODEL_REVISION
 
@@ -86,6 +88,31 @@ class StubHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+def wait_for_readiness(
+    process: subprocess.Popen[str],
+    healthy: Event,
+    output: TextIO,
+    *,
+    timeout: float = 60,
+) -> None:
+    deadline = monotonic() + timeout
+    while True:
+        code = process.poll()
+        if code is not None:
+            output.seek(0)
+            logs = output.read().replace(TEST_SECRET, "[redacted]")[-8192:]
+            raise RuntimeError(
+                f"Provider exited before readiness (exit {code}). Captured output:\n{logs}"
+            )
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            raise RuntimeError(
+                "Provider did not become ready and send a periodic heartbeat"
+            )
+        if healthy.wait(min(0.1, remaining)):
+            return
+
+
 def verify_run(
     cache: Path, stop_signal: signal.Signals, *, retry: bool
 ) -> dict[str, object]:
@@ -118,10 +145,7 @@ def verify_run(
                 stdout=output,
                 stderr=subprocess.STDOUT,
             )
-            if not state.healthy.wait(60):
-                raise RuntimeError(
-                    "Provider did not become ready and send a periodic heartbeat"
-                )
+            wait_for_readiness(process, state.healthy, output)
             process.send_signal(stop_signal)
             code = process.wait(timeout=15)
             output.seek(0)

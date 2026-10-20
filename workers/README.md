@@ -42,7 +42,7 @@ UV_CACHE_DIR=.cache/uv uv run --env-file .env.provider --extra inference --locke
 4. Sends a heartbeat every 15 seconds by default.
 5. Attempts to mark the provider `offline` on SIGINT, SIGTERM, startup failure, or an exhausted connection retry.
 
-The optional `JMAC_HEARTBEAT_INTERVAL_SECONDS`, `JMAC_REQUEST_TIMEOUT_SECONDS`, and `JMAC_MAX_RETRIES` settings default to 15, 10, and 3 respectively. Retryable connection errors, HTTP 429, and temporary server errors use bounded exponential delays (1, 2, 4 seconds at the defaults). Authentication, validation, and function errors stop immediately. Retry waits are interrupted by shutdown signals. Shutdown makes one offline request bounded by the configured request timeout. Allow at least 30 seconds for container shutdown with the default settings.
+The optional `JMAC_HEARTBEAT_INTERVAL_SECONDS`, `JMAC_REQUEST_TIMEOUT_SECONDS`, and `JMAC_MAX_RETRIES` settings default to 15, 10, and 3 respectively. Retryable connection errors, HTTP 429, and temporary server errors use bounded exponential delays (1, 2, 4 seconds at the defaults). Authentication, validation, and function errors stop immediately. Shutdown signals interrupt startup model loading, warmup, and retry waits; a native library operation may need to return before Python handles the signal. Shutdown attempts one offline request even if it occurs before startup authentication, bounded by the configured request timeout. Model startup failures report only the exception type, without its message or payload. Allow at least 30 seconds for container shutdown with the default settings.
 
 Secrets are sent only in the mutation body over HTTPS (HTTP is allowed only for loopback development), omitted from configuration representations, and never included in worker logs. Remote error text and Convex `logLines` are discarded, and HTTP redirects are rejected. The transport follows the [Convex HTTP mutation protocol](https://docs.convex.dev/http-api/).
 
@@ -78,7 +78,7 @@ docker run --rm \
 
 This mode needs outbound access to Convex; do not use `--network none` for a live provider. The model is already bundled and no model-hosting connection is needed. Ctrl+C or `docker stop` initiates offline cleanup. The image's default entrypoint continues to perform one-shot evaluations as below.
 
-The verification script resolves the image ID once, starts two fresh containers with networking disabled and a read-only root filesystem, and compares the complete result files. A temporary `/tmp` mount permits transient library files; only the output directory persists. It writes `result-first.json`, `result-second.json`, and the exact `image-id.txt` to `workers/output/`. An image name and output directory can also be supplied:
+The verification script resolves the image ID once, starts two fresh containers with networking disabled and a read-only root filesystem, and compares the complete result files. A temporary `/tmp` mount permits transient library files; only the output directory persists. It writes `result-first.json`, `result-second.json`, and the exact `image-id.txt` to `workers/output/`. Output directories containing commas are rejected because Docker uses commas to delimit mount options. An image name and output directory can also be supplied:
 
 ```sh
 sh workers/scripts/verify-container.sh jmac-worker:0.4.0 workers/output/custom
@@ -176,13 +176,15 @@ Use an interpreter of Python 3.11 or newer if your system's `python3` is older. 
 
 ## Benchmark format and results
 
-Benchmarks follow the [backend format](../packages/backend/README.md#benchmark-file-format): schema version `1.0.0`, name, description, version, and a nonempty items array. Each item requires an item ID, prompt, nonempty choices, and a valid zero-based `correct_choice`. Description and version may be empty strings. Additional fields are ignored, matching the backend's validation behavior.
+Benchmarks follow the [backend format](../packages/backend/README.md#benchmark-file-format): schema version `1.0.0`, name, description, version, and a nonempty items array. Each item requires an item ID, prompt, nonempty choices, and a valid zero-based `correct_choice`. Description and version may be empty strings. Additional fields are ignored, matching the backend's validation behavior, but nonstandard JSON constants such as `NaN` and `Infinity` are rejected even in ignored fields.
 
 Predictions are a JSON array of zero-based integer choice indices, one per item in benchmark order. Missing or extra predictions, booleans, non-integer values, and out-of-range indices are errors. Each score is `true` for a correct prediction and `false` otherwise, preserving benchmark item order. Accuracy is correct answers divided by the total, on a scale of 0 to 1.
 
 Result schema `2.0.0` replaces the integer score arrays from schema `1.0.0` with boolean arrays matching Solidity `bool[]`. Benchmark input schema remains `1.0.0`. Results include the result schema version, benchmark name/version and SHA-256 content hash, ordered item IDs, predictions, scores, correct count, total, and accuracy. Model runs additionally include an `inference` metadata object. The benchmark hash covers the original file bytes, matching the backend upload hash; whitespace changes the hash.
 
-Results omit prompts, choices, and the answer key, but per-item predictions and scores should still be treated as private evaluation data. This JSON format is local to the worker and is not yet a contract submission or commitment format. Local scores match the contract's `bool[]` result field (`[true, false, ...]`). A future adapter must use the agreed contract encoding and hash algorithm for that ordered score vector, rather than hashing the local JSON or its benchmark SHA-256. Malformed inputs, missing files/model dependencies, inference failures, and context-limit violations return a nonzero exit code. Validation and inference finish before writing the output file. The output cannot be either input file.
+Results omit prompts, choices, and the answer key, but per-item predictions and scores should still be treated as private evaluation data. This JSON format is local to the worker and is not yet a contract submission or commitment format. Local scores match the contract's `bool[]` result field (`[true, false, ...]`). A future adapter must use the agreed contract encoding and hash algorithm for that ordered score vector, rather than hashing the local JSON or its benchmark SHA-256. Malformed inputs, missing files/model dependencies, inference failures, and context-limit violations return a nonzero exit code. The output cannot be either input file.
+
+The worker checks the output directory and writability before loading a benchmark or model, and creates a private temporary file in that directory. It replaces the destination only after successful evaluation, writing, flushing, and syncing. Validation, inference, write, and replacement failures preserve an existing result and remove the temporary file. Temporary files left by a forced kill are ignored by Git under `workers/`.
 
 ## Development checks
 
@@ -194,7 +196,7 @@ From `workers/`, after setup:
 .venv/bin/ruff format --check .
 ```
 
-Tests use synthetic model logits, mocked model loading, and mocked HTTP transport; they do not download model weights or access the network. They cover provider startup ordering, heartbeat cadence, bounded retries, signal handling, error handling, and secret redaction. Without inference dependencies, the original validation/scoring tests can still run independently:
+Tests use synthetic model logits, mocked model loading, and mocked HTTP transport; they do not download model weights or access the network. They cover provider startup ordering, heartbeat cadence, bounded retries, real subprocess shutdown during blocked startup, atomic output failures, URL validation, verification-script failures, and secret redaction. Without inference dependencies, the validation/scoring tests can still run independently:
 
 ```sh
 python3 -m unittest discover -s tests -p test_worker.py -v
@@ -208,6 +210,6 @@ PYTHONPATH=. .venv/bin/python scripts/verify-provider.py \
   --output output/provider-lifecycle.json
 ```
 
-This uses cached model files and a local Convex-compatible HTTP stub. It starts real provider subprocesses, injects a temporary HTTP 503 failure, checks successful heartbeats, sends SIGTERM and SIGINT, and verifies offline cleanup and secret-safe logs. It needs permission to open a loopback port. This verifies transport and lifecycle against the current API contract, not authentication against a deployed Convex project. Live verification needs an actual registered provider ID and secret in `.env.provider`.
+This uses cached model files and a local Convex-compatible HTTP stub. It starts real provider subprocesses, injects a temporary HTTP 503 failure, checks successful heartbeats, sends SIGTERM and SIGINT, and verifies offline cleanup and secret-safe logs. If a provider exits during startup, the script reports its exit code and captured output immediately, with the test credential redacted. It needs permission to open a loopback port. This verifies transport and lifecycle against the current API contract, not authentication against a deployed Convex project. Live verification needs an actual registered provider ID and secret in `.env.provider`.
 
 Benchmark validation lives in `jmac_worker/benchmark.py`, model inference in `jmac_worker/inference.py`, and scoring in `jmac_worker/scoring.py`. Provider transport is in `jmac_worker/provider_api.py`; the lifecycle is in `jmac_worker/provider.py`. Connecting the worker to the existing assignment/download APIs and implementing contract commit/reveal integration are subsequent milestones.

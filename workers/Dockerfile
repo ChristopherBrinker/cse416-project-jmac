@@ -31,6 +31,7 @@ RUN python -c 'from huggingface_hub import snapshot_download; from jmac_worker.i
 FROM model AS verified
 
 COPY tests/ ./tests/
+COPY scripts/ ./scripts/
 COPY examples/ ./examples/
 RUN --network=none python -m unittest discover -s tests -v
 

@@ -45,7 +45,8 @@ def config_from_environment(environment: Mapping[str, str]) -> ProviderConfig:
     )
 
 
-class _ShutdownRequested(Exception):
+class _ShutdownRequested(BaseException):
+    # Model libraries must not swallow cancellation in broad exception/retry handlers.
     pass
 
 
@@ -79,19 +80,25 @@ def run_provider(
     model_loader: Callable[[], LocalModelRunner],
     stop: Event,
 ) -> None:
-    backend_touched = False
     try:
         _call_with_retries(lambda: client.set_status("offline"), config, stop)
-        backend_touched = True
         if stop.is_set():
             return
         LOGGER.info("Provider offline. Loading and warming up the pinned model.")
         try:
-            runner = model_loader()
-            runner.predict(
-                [Question("startup-check", "Select the only choice.", ("Ready",))]
-            )
-        except Exception:
+            with shutdown_signals(stop, interrupt=True):
+                if stop.is_set():
+                    return
+                runner = model_loader()
+                if stop.is_set():
+                    return
+                runner.predict(
+                    [Question("startup-check", "Select the only choice.", ("Ready",))]
+                )
+        except _ShutdownRequested:
+            return
+        except Exception as error:
+            LOGGER.error("Pinned model startup failed (%s).", type(error).__name__)
             raise ModelStartupError(
                 "Pinned model could not be loaded or warmed up."
             ) from None
@@ -107,21 +114,22 @@ def run_provider(
     except _ShutdownRequested:
         return
     finally:
-        if backend_touched:
-            try:
-                # One bounded attempt, even when shutdown interrupted a retry delay.
-                client.set_status("offline")
-                LOGGER.info("Provider offline.")
-            except ProviderAPIError:
-                LOGGER.error(
-                    "Could not confirm offline status; check the provider in the backend."
-                )
+        try:
+            # Always attempt cleanup: a stop or lost response may precede startup auth.
+            client.set_status("offline")
+            LOGGER.info("Provider offline.")
+        except ProviderAPIError:
+            LOGGER.error(
+                "Could not confirm offline status; check the provider in the backend."
+            )
 
 
 @contextmanager
-def shutdown_signals(stop: Event) -> Iterator[None]:
+def shutdown_signals(stop: Event, *, interrupt: bool = False) -> Iterator[None]:
     def request_stop(_signum: int, _frame: object) -> None:
         stop.set()
+        if interrupt:
+            raise _ShutdownRequested
 
     previous = {
         kind: signal.signal(kind, request_stop)

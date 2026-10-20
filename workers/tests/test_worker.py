@@ -1,5 +1,6 @@
 """Validate benchmark boundaries, scoring rules, and the command-line workflow."""
 
+import io
 import json
 import subprocess
 import sys
@@ -8,8 +9,11 @@ import unittest
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
+from unittest.mock import patch
 
+from jmac_worker.__main__ import main
 from jmac_worker.benchmark import load_benchmark
+from jmac_worker.output import atomic_output
 from jmac_worker.scoring import score_benchmark
 
 WORKERS_DIRECTORY = Path(__file__).resolve().parents[1]
@@ -139,6 +143,17 @@ class BenchmarkTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     load_benchmark(self.path)
 
+    def test_rejects_nonstandard_json_constants_even_in_ignored_fields(self) -> None:
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value):
+                self.document["extra"] = {"nested": [value]}
+                self.write_document(self.document)
+                with self.assertRaisesRegex(ValueError, "standard JSON numbers"):
+                    load_benchmark(self.path)
+        self.document["extra"] = ["NaN", "Infinity", "-Infinity"]
+        self.write_document(self.document)
+        self.assertEqual(load_benchmark(self.path).name, self.document["name"])
+
 
 class ScoringTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -212,6 +227,71 @@ class ScoringTests(unittest.TestCase):
         predictions[0] = 0
         self.assertEqual(result.predictions, (1, 0, 1))
         self.assertEqual(self.benchmark.items[0].correct_choice, 1)
+
+
+class OutputTests(unittest.TestCase):
+    def test_failed_write_sync_or_replace_preserves_old_result_and_removes_temp(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.json"
+            path.write_text("old result", encoding="utf-8")
+            with self.assertRaises(OSError):
+                with atomic_output(path) as output:
+                    output.write("partial result")
+                    raise OSError("simulated disk full")
+            for operation in ("fsync", "replace"):
+                with self.subTest(operation=operation):
+                    with (
+                        patch(
+                            f"jmac_worker.output.os.{operation}",
+                            side_effect=OSError("disk full"),
+                        ),
+                        self.assertRaises(OSError),
+                        atomic_output(path) as output,
+                    ):
+                        output.write("new result")
+                    self.assertEqual(path.read_text(), "old result")
+                    self.assertEqual(list(Path(directory).iterdir()), [path])
+
+    def test_invalid_output_fails_before_benchmark_or_model_loading(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            parent_file = root / "file"
+            parent_file.write_text("not a directory")
+            for destination in (
+                root / "missing" / "result.json",
+                root,
+                parent_file / "result.json",
+            ):
+                with self.subTest(destination=destination.name):
+                    self.assert_preflight_failure(destination)
+            with patch("jmac_worker.output.os.access", return_value=False):
+                self.assert_preflight_failure(root / "result.json")
+
+    def assert_preflight_failure(self, destination: Path) -> None:
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "jmac_worker",
+                    "--benchmark",
+                    str(BENCHMARK_PATH),
+                    "--model",
+                    "smollm2-135m",
+                    "--output",
+                    str(destination),
+                ],
+            ),
+            patch("sys.stderr", new_callable=io.StringIO),
+            patch("jmac_worker.__main__.load_benchmark") as benchmark,
+            patch("jmac_worker.__main__.LocalModelRunner") as runner,
+        ):
+            with self.assertRaises(SystemExit) as error:
+                main()
+            self.assertEqual(error.exception.code, 1)
+            benchmark.assert_not_called()
+            runner.assert_not_called()
 
 
 class CommandLineTests(unittest.TestCase):
