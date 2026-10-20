@@ -9,6 +9,7 @@ export function useDashboardAction() {
   const inFlight = useRef(false);
   const [pending, setPending] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const reset = () => setActionError(null);
 
   const run = async (
     action: () => Promise<void>,
@@ -34,5 +35,5 @@ export function useDashboardAction() {
     setPending(false);
     return succeeded;
   };
-  return { pending, error: actionError, run };
+  return { pending, error: actionError, reset, run };
 }

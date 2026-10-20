@@ -17,7 +17,7 @@ import { Label } from "@cse416-project-jmac/ui/components/label";
 import { useMutation, useQuery } from "convex/react";
 import { PlusIcon } from "lucide-react";
 import { useId, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 
 import type { Benchmark, Model } from "@/lib/evaluations";
 import { truncateHash } from "@/lib/evaluations";
@@ -102,6 +102,12 @@ function ModelOption({
 const optionalSearch = (value: string): string | undefined =>
   value.trim() || undefined;
 
+const preventSearchSubmit = (event: KeyboardEvent<HTMLInputElement>) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+  }
+};
+
 export function NewEvaluationDialog({
   onCreate,
 }: {
@@ -130,21 +136,27 @@ export function NewEvaluationDialog({
     open ? { name: optionalSearch(modelName) } : "skip"
   );
   const createJob = useMutation(api.job.createJob);
-  const { pending, error, run } = useDashboardAction();
+  const { pending, error, reset, run } = useDashboardAction();
 
+  const close = () => {
+    setOpen(false);
+    setBenchmark(null);
+    setModel(null);
+    setName("");
+    setOwnerName("");
+    setVersion("");
+    setModelName("");
+    reset();
+  };
   const changeOpen = (value: boolean) => {
     if (pending) {
       return;
     }
-    setOpen(value);
-    if (!value) {
-      setBenchmark(null);
-      setModel(null);
-      setName("");
-      setOwnerName("");
-      setVersion("");
-      setModelName("");
+    if (value) {
+      setOpen(true);
+      return;
     }
+    close();
   };
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -162,9 +174,7 @@ export function NewEvaluationDialog({
       onCreate(result.jobId);
     }, "Evaluation created. Fund it to start the run.");
     if (succeeded) {
-      setOpen(false);
-      setBenchmark(null);
-      setModel(null);
+      close();
     }
   };
 
@@ -197,6 +207,7 @@ export function NewEvaluationDialog({
                   type="search"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
+                  onKeyDown={preventSearchSubmit}
                   placeholder="Search benchmarks…"
                 />
               </div>
@@ -206,6 +217,7 @@ export function NewEvaluationDialog({
                   id={`${fieldId}-owner`}
                   value={ownerName}
                   onChange={(event) => setOwnerName(event.target.value)}
+                  onKeyDown={preventSearchSubmit}
                   placeholder="Exact owner name"
                 />
               </div>
@@ -215,6 +227,7 @@ export function NewEvaluationDialog({
                   id={`${fieldId}-version`}
                   value={version}
                   onChange={(event) => setVersion(event.target.value)}
+                  onKeyDown={preventSearchSubmit}
                   placeholder="Exact version"
                 />
               </div>
@@ -262,6 +275,7 @@ export function NewEvaluationDialog({
                 type="search"
                 value={modelName}
                 onChange={(event) => setModelName(event.target.value)}
+                onKeyDown={preventSearchSubmit}
                 placeholder="Search models…"
               />
             </div>

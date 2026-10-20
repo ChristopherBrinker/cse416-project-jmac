@@ -74,7 +74,7 @@ function ProviderCard({
   models: Model[];
 }) {
   const fieldId = useId();
-  const [maxJobs, setMaxJobs] = useState(String(provider.maxJobs));
+  const [capacityDraft, setCapacityDraft] = useState<string | null>(null);
   const [modelName, setModelName] = useState("");
   const [modelId, setModelId] = useState<string | null>(null);
   const searchedModels = useQuery(api.model.getModels, {
@@ -85,7 +85,9 @@ function ProviderCard({
   const addModel = useMutation(api.provider.addModelSupport);
   const removeModel = useMutation(api.provider.removeModelSupport);
   const { pending, error, run } = useDashboardAction();
+  const maxJobs = capacityDraft ?? String(provider.maxJobs);
   const offline = provider.status === "offline";
+  const settingsDisabled = !offline || pending;
   const availableModels = unsupportedModels(searchedModels, provider);
   const modelItems = availableModels.map((model) => ({
     value: model._id,
@@ -111,6 +113,7 @@ function ProviderCard({
       if (!result.success) {
         throw new Error(result.error);
       }
+      setCapacityDraft(null);
     }, "Provider capacity updated");
   };
   const updateStatus = async (newStatus: "ready" | "offline") => {
@@ -232,14 +235,10 @@ function ProviderCard({
               step={1}
               required
               value={maxJobs}
-              onChange={(event) => setMaxJobs(event.target.value)}
-              disabled={!offline || pending}
+              onChange={(event) => setCapacityDraft(event.target.value)}
+              disabled={settingsDisabled}
             />
-            <Button
-              type="submit"
-              variant="outline"
-              disabled={!offline || pending}
-            >
+            <Button type="submit" variant="outline" disabled={settingsDisabled}>
               Save
             </Button>
           </div>
@@ -263,7 +262,7 @@ function ProviderCard({
                   <Button
                     size="xs"
                     variant="ghost"
-                    disabled={!offline || pending}
+                    disabled={settingsDisabled}
                     aria-label={`Remove ${modelLabel(id, models)} support`}
                     onClick={async () => {
                       await run(async () => {
@@ -294,7 +293,7 @@ function ProviderCard({
               setModelName(event.target.value);
               setModelId(null);
             }}
-            disabled={!offline || pending}
+            disabled={settingsDisabled}
             placeholder="Search models…"
           />
           <Label htmlFor={`${fieldId}-model`}>Model</Label>
@@ -303,7 +302,7 @@ function ProviderCard({
               items={modelItems}
               value={modelId}
               onValueChange={setModelId}
-              disabled={!offline || pending || availableModels.length === 0}
+              disabled={settingsDisabled || availableModels.length === 0}
             >
               <SelectTrigger id={`${fieldId}-model`} className="min-w-0 flex-1">
                 <SelectValue placeholder="Choose or search for a model" />
@@ -319,7 +318,7 @@ function ProviderCard({
             <Button
               type="submit"
               variant="outline"
-              disabled={!offline || pending || !modelId}
+              disabled={settingsDisabled || !modelId}
             >
               Add
             </Button>
@@ -359,8 +358,14 @@ export function ProvidersPanel({ models }: { models: Model[] }) {
   );
   const registerProvider = useMutation(api.provider.register);
   const { pending, error, run } = useDashboardAction();
+  const loadingProviders = status === "LoadingFirstPage";
+  const awaitingApproval = providers.some((provider) => !provider.approved);
+  const registrationDisabled = pending || loadingProviders || awaitingApproval;
   const register = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (registrationDisabled) {
+      return;
+    }
     const succeeded = await run(async () => {
       const walletAddress = address.trim();
       if (!isAddress(walletAddress, { strict: false })) {
@@ -377,7 +382,6 @@ export function ProvidersPanel({ models }: { models: Model[] }) {
       setAddress("");
     }
   };
-  const awaitingApproval = providers.some((provider) => !provider.approved);
 
   return (
     <div className="space-y-4">
@@ -400,10 +404,10 @@ export function ProvidersPanel({ models }: { models: Model[] }) {
                 placeholder="0x…"
                 autoComplete="off"
                 required
-                disabled={pending || awaitingApproval}
+                disabled={registrationDisabled}
                 className="font-mono"
               />
-              <Button type="submit" disabled={pending || awaitingApproval}>
+              <Button type="submit" disabled={registrationDisabled}>
                 {pending ? "Registering…" : "Register provider"}
               </Button>
             </div>
@@ -421,12 +425,12 @@ export function ProvidersPanel({ models }: { models: Model[] }) {
           </form>
         </CardContent>
       </Card>
-      {status === "LoadingFirstPage" ? (
+      {loadingProviders ? (
         <output className="text-muted-foreground py-6 text-center text-sm">
           Loading providers…
         </output>
       ) : null}
-      {status !== "LoadingFirstPage" && providers.length === 0 ? (
+      {!loadingProviders && providers.length === 0 ? (
         <p className="text-muted-foreground rounded-xl border p-8 text-center text-sm">
           You have no providers yet. Register your first worker above.
         </p>

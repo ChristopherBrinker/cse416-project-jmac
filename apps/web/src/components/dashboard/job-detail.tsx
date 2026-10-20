@@ -22,6 +22,8 @@ export interface FundingTransaction {
   confirmed: boolean;
 }
 
+export type FundingStatus = "checking" | "unfunded" | "funded" | "error";
+
 function SummaryItem({
   label,
   children,
@@ -42,6 +44,7 @@ interface JobDetailProps {
   walletConnected: boolean;
   funding: boolean;
   fundingBusy: boolean;
+  fundingStatus: FundingStatus;
   transaction: FundingTransaction | undefined;
   error: string | undefined;
   onFund: () => Promise<void>;
@@ -52,34 +55,47 @@ function FundingPanel({
   walletConnected,
   funding,
   fundingBusy,
+  fundingStatus,
   transaction,
   onFund,
 }: Omit<JobDetailProps, "error">) {
+  const fundedOnChain = transaction?.confirmed || fundingStatus === "funded";
+  const checkingFunding = fundingStatus === "checking";
+  const needsFundingCheck = fundingStatus === "error";
   return (
     <div className="bg-muted/50 space-y-3 rounded-lg border p-3">
       <p className="text-sm font-medium">
-        {transaction?.confirmed ? "Funding confirmed" : "Fund this evaluation"}
+        {fundedOnChain ? "Funding confirmed" : "Fund this evaluation"}
       </p>
       <p className="text-muted-foreground text-xs">
-        {transaction?.confirmed
+        {fundedOnChain
           ? "The transaction is confirmed on-chain. Waiting for the scheduler to update this job in Convex."
           : "Send the job's funding price to the evaluation contract. Network gas is additional. Providers are assigned after funding."}
       </p>
       <Button
         className="w-full"
-        disabled={!walletConnected || fundingBusy || transaction?.confirmed}
+        disabled={
+          (!walletConnected && !needsFundingCheck) ||
+          fundingBusy ||
+          fundedOnChain ||
+          checkingFunding
+        }
         onClick={onFund}
       >
         <WalletIcon data-icon="inline-start" />
-        {funding
-          ? "Confirming funding…"
-          : transaction?.confirmed
-            ? "Waiting for job update…"
-            : transaction
-              ? "Check funding transaction"
-              : `Fund job · ${formatWei(job.price)}`}
+        {checkingFunding
+          ? "Checking on-chain funding…"
+          : funding
+            ? "Confirming funding…"
+            : fundedOnChain
+              ? "Waiting for job update…"
+              : needsFundingCheck
+                ? "Check funding status"
+                : transaction
+                  ? "Check funding transaction"
+                  : `Fund job · ${formatWei(job.price)}`}
       </Button>
-      {!walletConnected && !transaction?.confirmed ? (
+      {!walletConnected && !fundedOnChain ? (
         <p className="text-muted-foreground text-xs">
           Connect a wallet above to fund this job.
         </p>

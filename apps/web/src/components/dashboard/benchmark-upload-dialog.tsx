@@ -24,7 +24,7 @@ export function BenchmarkUploadDialog() {
   const fieldId = useId();
   const [open, setOpen] = useState(false);
   const [benchmarkId, setBenchmarkId] = useState<string | null>(null);
-  const { pending, error, run } = useDashboardAction();
+  const { pending, error, reset, run } = useDashboardAction();
   const upload = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -88,6 +88,9 @@ export function BenchmarkUploadDialog() {
         if (!pending) {
           setOpen(value);
           setBenchmarkId(null);
+          if (!value) {
+            reset();
+          }
         }
       }}
     >

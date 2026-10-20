@@ -77,6 +77,10 @@ export function JobsPanel({
 }: JobsPanelProps) {
   const [filter, setFilter] = useState<JobFilter>("all");
   const [query, setQuery] = useState("");
+  const hasMoreJobs = canLoadMore || loadingMore;
+  const noMatchDescription = hasMoreJobs
+    ? "Try another filter or search term, or load more jobs."
+    : "Try another filter or search term.";
   const normalizedQuery = query.trim().toLowerCase();
   const visibleJobs = jobs.filter(
     (job) =>
@@ -153,7 +157,7 @@ export function JobsPanel({
             <EmptyDescription>
               {jobs.length === 0
                 ? "Upload a benchmark and create your first evaluation."
-                : "Try another filter or search term, or load more jobs."}
+                : noMatchDescription}
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
@@ -255,7 +259,7 @@ export function JobsPanel({
         <p className="text-muted-foreground text-xs">
           {jobs.length} jobs loaded · Filters and totals use loaded jobs.
         </p>
-        {canLoadMore || loadingMore ? (
+        {hasMoreJobs ? (
           <Button
             variant="outline"
             size="sm"
