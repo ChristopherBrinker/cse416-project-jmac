@@ -1,0 +1,17 @@
+**
+!Dockerfile
+!.python-version
+!pyproject.toml
+!uv.lock
+!jmac_worker/
+!jmac_worker/*.py
+!examples/
+!examples/*.json
+!tests/
+!tests/*.py
+!scripts/
+!scripts/*.py
+!scripts/*.sh
+!third_party/
+!third_party/*.md
+!third_party/*.txt

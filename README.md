@@ -1,6 +1,6 @@
 # JMAC — Private AI Benchmarking
 
-JMAC is our CSE 416 project for private AI benchmarking. The repository currently provides the web application, authentication, benchmark uploading, and a paritally complete benchmark evaluation pipeline.
+JMAC is our CSE 416 project for private AI benchmarking. The repository provides the web application, authentication, benchmark uploads, a scheduler for funded jobs, and a Docker-packaged Python benchmark evaluator with provider readiness and heartbeats. The Evaluation contract supports funding, provider assignment, and result-hash commitments; reveal, result comparison, refunds, and payouts are not implemented yet. The worker does not yet fetch assignments or call the contract. See the [worker guide](workers/README.md) for pinned local model inference, provider setup, scoring, and repeatability checks.
 
 The application uses Next.js App Router and TypeScript, Convex for the backend, and Better Auth for email/password authentication through the supported Convex component. Bun workspaces and Turborepo manage the monorepo; Ultracite with Oxlint/Oxfmt and Lefthook handle code checks.
 
@@ -16,8 +16,10 @@ Our current implementation uses a local testnet. In a separate terminal, run an 
 anvil
 ```
 
-Next thing is to build and deploy the Evaluation smart contract.  
-Pick an account address output by anvil to represent the scheduler's wallet. Create `contracts/.env` and in it add `BACKEND_ADDRESS=0xYOUR_CHOSEN_ADDRESS`.  
+Next thing is to build and deploy the Evaluation smart contract.
+
+Pick an account address output by anvil to represent the scheduler's wallet. Create `contracts/.env` and in it add `BACKEND_ADDRESS=0xYOUR_CHOSEN_ADDRESS`.
+
 Using the url output by anvil as an http url (usually `http://127.0.0.1:8545`) and any private key output by anvil, run the following from the `contracts` directory:
 
 ```sh
@@ -136,7 +138,7 @@ packages/ui/          Shared UI components and styles
 packages/config/      Shared TypeScript configuration
 packages/scheduler/   Backend-blockchain interactions
 contracts/            Foundry workspace
-workers/              Planned Python/Docker evaluation workers
+workers/              Python/Docker evaluation, pinned model inference, and tests
 ```
 
 The frontend imports the generated, typed Convex API from the backend workspace. Commit Convex `_generated` files and regenerate them with Convex tooling; lint and formatting exclude these generated files. Varlock generates `apps/web/src/env.ts` during installation, and that file is ignored.

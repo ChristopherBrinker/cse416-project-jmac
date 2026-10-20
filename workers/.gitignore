@@ -1,0 +1,39 @@
+# Python environments, caches, and build artifacts
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.cache/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+*.whl
+.coverage
+.coverage.*
+htmlcov/
+
+# Local credentials; keep only configuration templates
+.env
+.env.*
+!.env.example
+!.env.schema
+
+# Downloaded model weights and exported container archives
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+*.gguf
+*.tar
+*.tar.gz
+*.zip
+
+# Private runtime inputs and generated evaluation output
+/input/
+/private/
+/result.json
+/result-*.json
+.jmac-result-*.tmp
+/output/
