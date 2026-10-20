@@ -2,7 +2,7 @@
 set -eu
 
 worker_script_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-worker_image=${1:-jmac-worker:0.3.0}
+worker_image=${1:-jmac-worker:0.4.0}
 worker_output_directory=${2:-"$worker_script_directory/../output"}
 
 mkdir -p "$worker_output_directory"

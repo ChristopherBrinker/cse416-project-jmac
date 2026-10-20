@@ -57,7 +57,7 @@ The [integration handoff](INTEGRATION.md) lists the backend and contract interfa
 From the repository root, with Docker running:
 
 ```sh
-docker build -t jmac-worker:0.3.0 workers
+docker build -t jmac-worker:0.4.0 workers
 sh workers/scripts/verify-container.sh
 ```
 
@@ -72,7 +72,7 @@ docker run --rm \
   --stop-timeout 30 \
   --env-file workers/.env.provider \
   --entrypoint /opt/worker/.venv/bin/python \
-  jmac-worker:0.3.0 \
+  jmac-worker:0.4.0 \
   -m jmac_worker.provider --cache-dir /opt/model-cache --offline
 ```
 
@@ -81,7 +81,7 @@ This mode needs outbound access to Convex; do not use `--network none` for a liv
 The verification script resolves the image ID once, starts two fresh containers with networking disabled and a read-only root filesystem, and compares the complete result files. A temporary `/tmp` mount permits transient library files; only the output directory persists. It writes `result-first.json`, `result-second.json`, and the exact `image-id.txt` to `workers/output/`. An image name and output directory can also be supplied:
 
 ```sh
-sh workers/scripts/verify-container.sh jmac-worker:0.3.0 workers/output/custom
+sh workers/scripts/verify-container.sh jmac-worker:0.4.0 workers/output/custom
 ```
 
 To evaluate a mounted benchmark, replace the example source file below with your own file:
@@ -95,7 +95,7 @@ docker run --rm \
   --user "$(id -u):$(id -g)" \
   --mount "type=bind,source=$PWD/workers/examples/benchmark.json,target=/input/benchmark.json,readonly" \
   --mount "type=bind,source=$PWD/workers/output,target=/output" \
-  jmac-worker:0.3.0 \
+  jmac-worker:0.4.0 \
   --benchmark /input/benchmark.json \
   --model smollm2-135m \
   --output /output/result.json
@@ -106,24 +106,22 @@ The user override lets the container write bind-mounted output as your host user
 Build for your deployment's architecture explicitly when it differs from your host:
 
 ```sh
-docker build --platform linux/amd64 -t jmac-worker:0.3.0-amd64 workers
-docker build --platform linux/arm64 -t jmac-worker:0.3.0-arm64 workers
+docker build --platform linux/amd64 -t jmac-worker:0.4.0-amd64 workers
+docker build --platform linux/arm64 -t jmac-worker:0.4.0-arm64 workers
 ```
 
 Cross-architecture builds need Docker emulation or a matching native builder. Compare repeated runs of the same image and architecture; matching results across architectures or between macOS and Linux are not guaranteed. The runtime reports its actual Python/package versions and OS/architecture. The image supports one-shot CPU evaluation and the separate provider presence lifecycle. Assignment polling and contract calls remain separate work.
 
-The package has been built and checked on Linux ARM64 and Linux AMD64 (AMD64 through emulation on the development Mac). Both builds pass the 54 unit tests, and two separate offline model evaluations produce identical result files within each architecture. The verification results and image IDs are saved under `workers/output/arm64/` and `workers/output/amd64/`.
+Rebuild the image from the current source before verification. Version `0.4.0` writes boolean score arrays using result schema `2.0.0`; earlier `0.3.0` images and exported archives write integer scores and do not include this change. Verification reports and exported images are local artifacts excluded from Git.
 
 To share the exact built image without a registry, from the repository root:
 
 ```sh
 mkdir -p workers/output
-docker image save --output workers/output/jmac-worker-0.3.0.tar jmac-worker:0.3.0
+docker image save --output workers/output/jmac-worker-0.4.0.tar jmac-worker:0.4.0
 ```
 
-A teammate can load it with `docker image load --input jmac-worker-0.3.0.tar`. Share the appropriate architecture and record the image ID alongside evaluation results. Rebuilding from pinned inputs does not promise an identical image ID; exporting the built image preserves the exact artifact.
-
-The prepared `workers/output/jmac-worker-0.3.0-arm64.tar.gz` and `workers/output/jmac-worker-0.3.0-amd64.tar.gz` archives can also be loaded directly with `docker image load --input <archive>`. The ARM64 archive includes both `jmac-worker:0.3.0` and `jmac-worker:0.3.0-arm64`; the AMD64 archive uses `jmac-worker:0.3.0-amd64`. Use the matching tag when running the verification script. `workers/output/SHA256SUMS` records the archive checksums. These generated files are local artifacts and are not committed.
+A teammate can load it with `docker image load --input jmac-worker-0.4.0.tar`. Share the appropriate architecture and record the image ID alongside evaluation results. Rebuilding from pinned inputs does not promise an identical image ID; exporting the built image preserves the exact artifact.
 
 ## Run a real model
 
@@ -174,17 +172,17 @@ python3 -m jmac_worker \
   --output result.json
 ```
 
-Use an interpreter of Python 3.11 or newer if your system's `python3` is older. The supplied predictions produce scores `[1, 0, 1]`, `correct: 2`, `total: 3`, and `accuracy: 0.6666666666666666`. These are fixed example predictions, not recorded model outputs. Choose exactly one of `--predictions` and `--model`.
+Use an interpreter of Python 3.11 or newer if your system's `python3` is older. The supplied predictions produce scores `[true, false, true]`, `correct: 2`, `total: 3`, and `accuracy: 0.6666666666666666`. These are fixed example predictions, not recorded model outputs. Choose exactly one of `--predictions` and `--model`.
 
 ## Benchmark format and results
 
 Benchmarks follow the [backend format](../packages/backend/README.md#benchmark-file-format): schema version `1.0.0`, name, description, version, and a nonempty items array. Each item requires an item ID, prompt, nonempty choices, and a valid zero-based `correct_choice`. Description and version may be empty strings. Additional fields are ignored, matching the backend's validation behavior.
 
-Predictions are a JSON array of zero-based integer choice indices, one per item in benchmark order. Missing or extra predictions, booleans, non-integer values, and out-of-range indices are errors. Each valid prediction earns `1` for a match and `0` otherwise. Accuracy is correct answers divided by the total, on a scale of 0 to 1.
+Predictions are a JSON array of zero-based integer choice indices, one per item in benchmark order. Missing or extra predictions, booleans, non-integer values, and out-of-range indices are errors. Each score is `true` for a correct prediction and `false` otherwise, preserving benchmark item order. Accuracy is correct answers divided by the total, on a scale of 0 to 1.
 
-Results include the result schema version, benchmark name/version and SHA-256 content hash, ordered item IDs, predictions, scores, correct count, total, and accuracy. Model runs additionally include an `inference` metadata object. The benchmark hash covers the original file bytes, matching the backend upload hash; whitespace changes the hash.
+Result schema `2.0.0` replaces the integer score arrays from schema `1.0.0` with boolean arrays matching Solidity `bool[]`. Benchmark input schema remains `1.0.0`. Results include the result schema version, benchmark name/version and SHA-256 content hash, ordered item IDs, predictions, scores, correct count, total, and accuracy. Model runs additionally include an `inference` metadata object. The benchmark hash covers the original file bytes, matching the backend upload hash; whitespace changes the hash.
 
-Results omit prompts, choices, and the answer key, but per-item predictions and scores should still be treated as private evaluation data. This JSON format is local to the worker and is not yet a contract submission or commitment format. Local scores are integers (`[1, 0, ...]`); the contract's result field is `bool[]` (`[true, false, ...]`). A future adapter must convert the ordered score vector and use the agreed contract encoding and hash algorithm, rather than hashing the local JSON or its benchmark SHA-256. Malformed inputs, missing files/model dependencies, inference failures, and context-limit violations return a nonzero exit code. Validation and inference finish before writing the output file. The output cannot be either input file.
+Results omit prompts, choices, and the answer key, but per-item predictions and scores should still be treated as private evaluation data. This JSON format is local to the worker and is not yet a contract submission or commitment format. Local scores match the contract's `bool[]` result field (`[true, false, ...]`). A future adapter must use the agreed contract encoding and hash algorithm for that ordered score vector, rather than hashing the local JSON or its benchmark SHA-256. Malformed inputs, missing files/model dependencies, inference failures, and context-limit violations return a nonzero exit code. Validation and inference finish before writing the output file. The output cannot be either input file.
 
 ## Development checks
 

@@ -1,6 +1,6 @@
 # Worker integration handoff
 
-The `0.3.0` worker runs the pinned model, scores benchmarks, produces repeatable local results, and manages provider presence. Completing a job from the backend is the next MVP milestone. This handoff distinguishes the available interfaces from the remaining integration requirements.
+The `0.4.0` worker runs the pinned model, scores benchmarks, produces repeatable local results, and manages provider presence. Completing a job from the backend is the next MVP milestone. This handoff distinguishes the available interfaces from the remaining integration requirements.
 
 ## Current boundary
 
@@ -31,7 +31,7 @@ For the first model, map the backend model record to `HuggingFaceTB/SmolLM2-135M
 
 The registry/escrow owner has supplied the initial contract and ABIs. Deployment configuration, commit/reveal deadlines, and the rest of the result lifecycle still need agreement before adding worker transaction code:
 
-- The requested contract result is the ordered boolean score vector (`[true, false, ...]`). The worker currently writes integer scores (`[1, 0, ...]`), so the adapter must convert them. Worker metadata varies across machines and should not accidentally become part of result agreement.
+- The requested contract result is the ordered boolean score vector (`[true, false, ...]`). The worker writes this boolean array directly in result schema `2.0.0`, with one correctness value per benchmark item; predictions remain integer choice indices. Worker metadata varies across machines and should not accidentally become part of result agreement.
 - Canonical encoding, hash algorithm, and any salt or job/provider binding used for commitments. The current local JSON file is not a commitment format.
 - A reveal function that hashes the supplied boolean array, validates it against that provider's commitment, and compares both revealed arrays. Matching arrays should enable completion and separate payout claims; disagreement should enable failure and a separate refund. These functions and events are not yet implemented.
 - How workers observe commit completion, reveal results, handle failed transactions or expired jobs, and request payment. Confirm which responsibilities belong in the worker and which belong in the backend.
@@ -55,4 +55,4 @@ The registry/escrow owner has supplied the initial contract and ABIs. Deployment
 
 ## Message for the team
 
-> The worker and Docker package are ready for local evaluation, and provider readiness/heartbeats are implemented. Main now has assignments, authorized benchmark downloads, and contract commitments. The worker still needs adapters for those APIs, job metadata with the expected benchmark hash and pinned model mapping, and conversion of integer scores to boolean arrays. Reveal/comparison, refunds, payouts, and the exact commitment encoding/deadlines remain contract work. Live provider authentication is still unverified.
+> The worker and Docker package are ready for local evaluation, and provider readiness/heartbeats are implemented. Main now has assignments, authorized benchmark downloads, and contract commitments. The worker still needs adapters for those APIs, job metadata with the expected benchmark hash and pinned model mapping, and contract transaction integration. The score output already uses boolean arrays matching `bool[]`. Reveal/comparison, refunds, payouts, and the exact commitment encoding/deadlines remain contract work. Live provider authentication is still unverified.

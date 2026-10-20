@@ -37,7 +37,7 @@ RUN --network=none python -m unittest discover -s tests -v
 FROM base AS runtime
 
 LABEL org.opencontainers.image.title="JMAC evaluation worker" \
-      org.opencontainers.image.version="0.3.0" \
+      org.opencontainers.image.version="0.4.0" \
       org.opencontainers.image.description="Pinned CPU evaluator with provider presence lifecycle"
 
 ENV HF_HUB_OFFLINE=1

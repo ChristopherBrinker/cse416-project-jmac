@@ -149,7 +149,7 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(
             result,
             {
-                "schema_version": "1.0.0",
+                "schema_version": "2.0.0",
                 "benchmark": {
                     "name": "Worker scoring example",
                     "version": "1.0.0",
@@ -157,17 +157,26 @@ class ScoringTests(unittest.TestCase):
                 },
                 "item_ids": ["arithmetic", "capital", "comparison"],
                 "predictions": [1, 0, 1],
-                "scores": [1, 0, 1],
+                "scores": [True, False, True],
                 "correct": 2,
                 "total": 3,
                 "accuracy": 2 / 3,
             },
         )
 
+    def test_scores_are_booleans_in_memory_and_json(self) -> None:
+        result = score_benchmark(self.benchmark, [1, 0, 1])
+        self.assertTrue(all(type(score) is bool for score in result.scores))
+        document = json.loads(json.dumps(result.to_dict()))
+        self.assertTrue(all(type(score) is bool for score in document["scores"]))
+        self.assertTrue(all(type(index) is int for index in document["predictions"]))
+        self.assertIs(type(document["correct"]), int)
+        self.assertIs(type(document["total"]), int)
+
     def test_all_correct_and_all_wrong(self) -> None:
         for predictions, scores, correct, accuracy in (
-            ([1, 2, 1], [1, 1, 1], 3, 1.0),
-            ([0, 0, 0], [0, 0, 0], 0, 0.0),
+            ([1, 2, 1], [True, True, True], 3, 1.0),
+            ([0, 0, 0], [False, False, False], 0, 0.0),
         ):
             with self.subTest(predictions=predictions):
                 result = score_benchmark(self.benchmark, predictions).to_dict()
@@ -233,7 +242,8 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(first.returncode, 0, first.stderr)
         result_bytes = self.output.read_bytes()
         result = json.loads(result_bytes)
-        self.assertEqual(result["scores"], [1, 0, 1])
+        self.assertEqual(result["scores"], [True, False, True])
+        self.assertTrue(all(type(score) is bool for score in result["scores"]))
         self.assertEqual(result["accuracy"], 2 / 3)
         second = self.run_worker(*args)
         self.assertEqual(second.returncode, 0, second.stderr)

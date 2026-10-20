@@ -4,14 +4,14 @@ from dataclasses import dataclass
 
 from .benchmark import Benchmark
 
-RESULT_SCHEMA_VERSION = "1.0.0"
+RESULT_SCHEMA_VERSION = "2.0.0"
 
 
 @dataclass(frozen=True, slots=True)
 class EvaluationResult:
     benchmark: Benchmark
     predictions: tuple[int, ...]
-    scores: tuple[int, ...]
+    scores: tuple[bool, ...]
 
     def to_dict(self) -> dict[str, object]:
         correct = sum(self.scores)
@@ -42,7 +42,7 @@ def score_benchmark(benchmark: Benchmark, predictions: object) -> EvaluationResu
         )
 
     validated_predictions: list[int] = []
-    scores: list[int] = []
+    scores: list[bool] = []
     for index, (item, prediction) in enumerate(
         zip(benchmark.items, predictions, strict=True)
     ):
@@ -52,6 +52,6 @@ def score_benchmark(benchmark: Benchmark, predictions: object) -> EvaluationResu
                 f"0 and {len(item.choices) - 1}"
             )
         validated_predictions.append(prediction)
-        scores.append(int(prediction == item.correct_choice))
+        scores.append(prediction == item.correct_choice)
 
     return EvaluationResult(benchmark, tuple(validated_predictions), tuple(scores))

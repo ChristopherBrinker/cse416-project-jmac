@@ -184,7 +184,8 @@ class InferenceCommandTests(unittest.TestCase):
                 )
             result = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(result["predictions"], [0, 2, 0])
-            self.assertEqual(result["scores"], [0, 1, 0])
+            self.assertEqual(result["scores"], [False, True, False])
+            self.assertTrue(all(type(score) is bool for score in result["scores"]))
             self.assertEqual(result["inference"]["model_id"], MODEL_ID)
 
     def test_inference_failure_preserves_existing_output(self) -> None:
