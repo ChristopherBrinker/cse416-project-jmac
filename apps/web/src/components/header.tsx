@@ -14,7 +14,7 @@ const NAV_LINK_CLASS_NAME =
 
 export default function Header() {
   const pathname = usePathname();
-  const { data: session } = authClient.useSession();
+  const { data: session, isPending } = authClient.useSession();
   const links = [
     { to: "/", label: "Home" },
     { to: "/dashboard", label: "Dashboard" },
@@ -52,17 +52,19 @@ export default function Header() {
           {session ? (
             <UserMenu />
           ) : (
-            <Link
-              href="/sign-in"
-              aria-current={pathname === "/sign-in" ? "page" : undefined}
-              className={cn(
-                NAV_LINK_CLASS_NAME,
-                "hidden sm:inline-flex",
-                pathname === "/sign-in" && "bg-muted text-foreground"
-              )}
-            >
-              Sign in
-            </Link>
+            !isPending && (
+              <Link
+                href="/sign-in"
+                aria-current={pathname === "/sign-in" ? "page" : undefined}
+                className={cn(
+                  NAV_LINK_CLASS_NAME,
+                  "hidden sm:inline-flex",
+                  pathname === "/sign-in" && "bg-muted text-foreground"
+                )}
+              >
+                Sign in
+              </Link>
+            )
           )}
         </div>
       </div>

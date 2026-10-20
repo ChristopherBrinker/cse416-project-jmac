@@ -33,14 +33,11 @@ export default function Home() {
         className="grid gap-12 py-14 sm:py-20 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-center lg:gap-16 lg:pt-28 lg:pb-24"
       >
         <div>
-          <p className="text-muted-foreground mb-7 text-xs font-medium tracking-[0.18em] uppercase">
-            Private data. Clear comparisons.
-          </p>
           <h1
             id="home-title"
             className="max-w-4xl text-4xl leading-[1.06] font-semibold tracking-[-0.045em] text-balance sm:text-6xl xl:text-7xl"
           >
-            The right AI model starts with your data.
+            Compare AI models with confidence.
           </h1>
           <p className="text-muted-foreground mt-7 max-w-xl text-base leading-relaxed sm:text-lg">
             Benchmark models across providers on your private datasets. Compare
@@ -48,22 +45,13 @@ export default function Home() {
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3 border-t pt-7 sm:mt-10 sm:pt-8">
             <Button
-              className="h-12 gap-5 rounded-lg bg-[#1558f5] px-6 text-sm text-white hover:bg-[#124bd1]"
+              className="bg-brand text-brand-foreground hover:bg-brand-hover focus-visible:ring-brand focus-visible:ring-offset-background h-12 gap-5 rounded-lg px-6 text-sm focus-visible:ring-2 focus-visible:ring-offset-2"
               size="lg"
               nativeButton={false}
               render={<Link href="/dashboard" />}
             >
               Start benchmarking
               <ArrowUpRight aria-hidden="true" />
-            </Button>
-            <Button
-              className="h-12 rounded-lg px-6 text-sm"
-              variant="outline"
-              size="lg"
-              nativeButton={false}
-              render={<Link href="/sign-in" />}
-            >
-              Sign in
             </Button>
           </div>
         </div>
