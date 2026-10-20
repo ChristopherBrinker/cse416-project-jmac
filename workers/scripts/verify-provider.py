@@ -106,8 +106,13 @@ def wait_for_readiness(
             )
         remaining = deadline - monotonic()
         if remaining <= 0:
+            process.kill()
+            process.wait(timeout=5)
+            output.seek(0)
+            logs = output.read().replace(TEST_SECRET, "[redacted]")[-8192:]
             raise RuntimeError(
-                "Provider did not become ready and send a periodic heartbeat"
+                "Provider did not become ready and send a periodic heartbeat. "
+                f"Captured output:\n{logs}"
             )
         if healthy.wait(min(0.1, remaining)):
             return
