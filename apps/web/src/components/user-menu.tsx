@@ -38,7 +38,7 @@ export default function UserMenu() {
         >
           {session?.user.name.slice(0, 1).toUpperCase() ?? "U"}
         </summary>
-        <div className="bg-background absolute z-10 mt-2 w-64 space-y-2 rounded border p-3 shadow">
+        <div className="bg-background absolute right-0 z-10 mt-2 w-64 space-y-2 rounded border p-3 shadow">
           <p className="truncate text-sm">{session?.user.email}</p>
           <button
             type="button"

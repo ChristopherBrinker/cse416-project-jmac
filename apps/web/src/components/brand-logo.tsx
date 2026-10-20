@@ -1,7 +1,7 @@
 import { cn } from "@cse416-project-jmac/ui/lib/utils";
 import Image from "next/image";
 
-export const PRODUCT_NAME = "Private AI Benchmark";
+export const PRODUCT_NAME = "Private by JMAC";
 
 const LOGO_SRC = "/private-ai-benchmarking-icon.svg";
 const LOGO_WIDTH = 280;

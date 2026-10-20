@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Private AI Benchmark",
+  title: "Private by JMAC",
   description:
     "Run private model evaluations across AI providers with verifiable receipts.",
 };
