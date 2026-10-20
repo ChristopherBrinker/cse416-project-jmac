@@ -37,6 +37,37 @@ async function main() {
   const convexClient = new ConvexHttpClient(process.env.CONVEX_URL);
   const BACKEND_CONVEX_KEY = process.env.BACKEND_CONVEX_KEY;
 
+  setInterval(async () => {
+    try {
+      const result = await convexClient.mutation(api.provider.checkHeartbeats, {
+        backendKey: BACKEND_CONVEX_KEY,
+      });
+      if (!result.success) {
+        console.log("Heartbeat check failed:", result.error);
+      }
+      console.log(`Heartbeat check modified ${result.modifiedCount} records`);
+    } catch (error) {
+      console.log("Provider heartbeat check error:", error);
+    }
+  }, 1000 * 60);
+
+  setInterval(
+    async () => {
+      try {
+        const result = await convexClient.mutation(api.job.cleanUp, {
+          backendKey: BACKEND_CONVEX_KEY,
+        });
+        if (!result.success) {
+          console.log("Job cleanup failed:", result.error);
+        }
+        console.log(`Job cleanup modified ${result.modifiedCount} records`);
+      } catch (error) {
+        console.log("Job cleanup error:", error);
+      }
+    },
+    1000 * 60 * 10
+  );
+
   const publicClient = createPublicClient({
     chain: foundry,
     transport: http(process.env.NET_URL),

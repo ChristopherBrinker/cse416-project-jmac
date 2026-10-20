@@ -31,7 +31,11 @@ export default defineSchema({
     modelId: v.id("models"),
     price: v.int64(),
     status: v.string(),
-  }).index("by_creatorId", ["creatorId"]),
+    statusTime: v.number(),
+    score: v.optional(v.number()),
+  })
+    .index("by_creatorId", ["creatorId"])
+    .index("by_status_statusTime", ["status", "statusTime"]),
 
   job_assignments: defineTable({
     jobId: v.id("jobs"),
@@ -53,7 +57,8 @@ export default defineSchema({
     lastHeartbeat: v.number(),
   })
     .index("by_userId_approved", ["userId", "approved"])
-    .index("by_userId", ["userId"]),
+    .index("by_userId", ["userId"])
+    .index("by_status_lastHeartbeat", ["status", "lastHeartbeat"]),
 
   model_support: defineTable({
     providerId: v.id("providers"),

@@ -30,6 +30,7 @@ export const createJob = mutation({
       modelId: args.modelId,
       price,
       status: "created",
+      statusTime: Date.now(),
     });
 
     return { success: true, jobId, price };
@@ -79,7 +80,10 @@ export const assignProviders = mutation({
     }
     /* Mutation can return success: false without reverting this.
       When implemented, scheduler will after some time use this as an indicator of failure*/
-    await ctx.db.patch("jobs", job._id, { status: "funded" });
+    await ctx.db.patch("jobs", job._id, {
+      status: "funded",
+      statusTime: Date.now(),
+    });
 
     // This will be turned into a sensible algorithm later
     const model_support = await ctx.db
@@ -151,7 +155,10 @@ export const setStatus = mutation({
       };
     }
 
-    await ctx.db.patch("jobs", job._id, { status: args.status });
+    await ctx.db.patch("jobs", job._id, {
+      status: args.status,
+      statusTime: Date.now(),
+    });
 
     const job_assignments = await ctx.db
       .query("job_assignments")
@@ -195,5 +202,38 @@ export const getJobsForProvider = query({
       )
       .collect();
     return job_assignments;
+  },
+});
+
+export const cleanUp = mutation({
+  args: { backendKey: v.string() },
+  handler: async (ctx, args) => {
+    if (!process.env.BACKEND_CONVEX_KEY) {
+      throw new Error("BACKEND_CONVEX_KEY not set in convex");
+    }
+    if (args.backendKey !== process.env.BACKEND_CONVEX_KEY) {
+      return { success: false, error: "Invalid key" };
+    }
+
+    // Timeout is 10 minutes
+    const jobTimeout = Date.now() - 1000 * 60 * 10;
+
+    const timedOutJobs = await ctx.db
+      .query("jobs")
+      .withIndex("by_status_statusTime", (q) =>
+        q.eq("status", "funded").lt("statusTime", jobTimeout)
+      )
+      .collect();
+
+    await Promise.all(
+      timedOutJobs.map(async (j) => {
+        await ctx.db.patch("jobs", j._id, {
+          status: "failed",
+          statusTime: Date.now(),
+        });
+      })
+    );
+
+    return { success: true, modifiedCount: timedOutJobs.length };
   },
 });
