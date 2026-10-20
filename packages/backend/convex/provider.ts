@@ -269,15 +269,17 @@ export const heartbeat = mutation({
 
     if (provider.status === "disconnected") {
       await ctx.db.patch("providers", provider._id, { status: "ready" });
-      const mss = await ctx.db
-        .query("model_support")
-        .withIndex("by_providerId", (q) => q.eq("providerId", provider._id))
-        .collect();
-      await Promise.all(
-        mss.map(async (ms) => {
-          await ctx.db.patch("model_support", ms._id, { available: true });
-        })
-      );
+      if (provider.currentJobs < provider.maxJobs) {
+        const mss = await ctx.db
+          .query("model_support")
+          .withIndex("by_providerId", (q) => q.eq("providerId", provider._id))
+          .collect();
+        await Promise.all(
+          mss.map(async (ms) => {
+            await ctx.db.patch("model_support", ms._id, { available: true });
+          })
+        );
+      }
     }
 
     return { success: true };

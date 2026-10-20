@@ -136,10 +136,10 @@ export const setStatus = mutation({
       return { success: false, error: "Invalid key" };
     }
 
-    if (args.status !== "failure" && args.status !== "success") {
+    if (args.status !== "failed" && args.status !== "succeeded") {
       return {
         success: false,
-        error: "Status can only be set to 'failure' or 'success'",
+        error: "Status can only be set to 'failed' or 'succeeded'",
       };
     }
 
@@ -148,7 +148,7 @@ export const setStatus = mutation({
       return { success: false, error: "Job not found" };
     }
 
-    if (job.status === "failure" || job.status === "success") {
+    if (job.status === "failed" || job.status === "succeeded") {
       return {
         success: false,
         error: "Job is already in a final state",
@@ -225,14 +225,33 @@ export const cleanUp = mutation({
       )
       .collect();
 
-    await Promise.all(
-      timedOutJobs.map(async (j) => {
-        await ctx.db.patch("jobs", j._id, {
-          status: "failed",
-          statusTime: Date.now(),
+    for (const j of timedOutJobs) {
+      await ctx.db.patch("jobs", j._id, {
+        status: "failed",
+        statusTime: Date.now(),
+      });
+      const assignments = await ctx.db
+        .query("job_assignments")
+        .withIndex("by_jobId", (q) => q.eq("jobId", j._id))
+        .filter((q) => q.eq(q.field("finished"), false))
+        .collect();
+      for (const ja of assignments) {
+        await ctx.db.patch("job_assignments", ja._id, { finished: true });
+        const p = (await ctx.db.get("providers", ja.providerId))!;
+        await ctx.db.patch("providers", p._id, {
+          currentJobs: p.currentJobs - 1n,
         });
-      })
-    );
+        if (p.currentJobs === p.maxJobs && p.status === "ready") {
+          const model_support = await ctx.db
+            .query("model_support")
+            .withIndex("by_providerId", (q) => q.eq("providerId", p._id))
+            .collect();
+          for (const ms of model_support) {
+            await ctx.db.patch("model_support", ms._id, { available: true });
+          }
+        }
+      }
+    }
 
     return { success: true, modifiedCount: timedOutJobs.length };
   },

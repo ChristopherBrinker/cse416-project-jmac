@@ -44,6 +44,7 @@ async function main() {
       });
       if (!result.success) {
         console.log("Heartbeat check failed:", result.error);
+        return;
       }
       console.log(`Heartbeat check modified ${result.modifiedCount} records`);
     } catch (error) {
@@ -59,6 +60,7 @@ async function main() {
         });
         if (!result.success) {
           console.log("Job cleanup failed:", result.error);
+          return;
         }
         console.log(`Job cleanup modified ${result.modifiedCount} records`);
       } catch (error) {
