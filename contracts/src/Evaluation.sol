@@ -13,7 +13,7 @@ struct Job {
 struct Provider {
     address addr;
     string id;
-    string commit;
+    bytes32 commit; // hash of the provider's result, zero until committed
     bool[] result; // since mc format, result can be represented by a list of true/false for each item
     bool flag; // used to detect default Provider i.e. not initialized
 }
@@ -25,6 +25,7 @@ contract Evaluation {
 
     event JobFunded(string jobId, uint256 price);
     event ProvidersAssigned(string jobId, address addressA, string providerIdA, address addressB, string providerIdB);
+    event CommitComplete(string jobId);
 
     constructor(address backendAddr) {
         require(backendAddr != address(0), "Must provide a backend address");
@@ -55,14 +56,14 @@ contract Evaluation {
             addr: addressA,
             id: providerIdA,
             flag: true,
-            commit: "",
+            commit: bytes32(0),
             result: new bool[](0)
         });
         Provider memory providerB = Provider({
             addr: addressB,
             id: providerIdB,
             flag: true,
-            commit: "",
+            commit: bytes32(0),
             result: new bool[](0)
         });
 
@@ -71,5 +72,31 @@ contract Evaluation {
 
         jobs[jobId] = j;
         emit ProvidersAssigned(jobId, addressA, providerIdA, addressB, providerIdB);
+    }
+
+    // Called by each assigned provider to submit the hash of its result. The hash is checked
+    // against the revealed data later, so each provider may only commit once.
+    function commitResult(string memory jobId, bytes32 commit) external {
+        require(commit != bytes32(0), "Invalid commit");
+
+        Job storage j = jobs[jobId];
+        require(j.flag, "Job not found");
+        require(j.providerA.flag && j.providerB.flag, "Providers not assigned");
+
+        Provider storage p;
+        if (msg.sender == j.providerA.addr) {
+            p = j.providerA;
+        } else if (msg.sender == j.providerB.addr) {
+            p = j.providerB;
+        } else {
+            revert("Unauthorized");
+        }
+        require(p.commit == bytes32(0), "Already committed");
+
+        p.commit = commit;
+
+        if (j.providerA.commit != bytes32(0) && j.providerB.commit != bytes32(0)) {
+            emit CommitComplete(jobId);
+        }
     }
 }
