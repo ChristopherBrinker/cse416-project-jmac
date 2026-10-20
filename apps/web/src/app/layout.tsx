@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Private",
   description:
-    "Run private model evaluations across AI providers with verifiable receipts.",
+    "Create and fund private model evaluations and manage your providers.",
 };
 
 export default function RootLayout({

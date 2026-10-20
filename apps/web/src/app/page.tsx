@@ -1,27 +1,22 @@
 import { Button } from "@cse416-project-jmac/ui/components/button";
-import {
-  ArrowUpRight,
-  ChartNoAxesColumn,
-  FileCheck2,
-  RotateCcw,
-} from "lucide-react";
+import { ArrowUpRight, ChartNoAxesColumn, Server, Wallet } from "lucide-react";
 import Link from "next/link";
 
 const features = [
   {
     icon: ChartNoAxesColumn,
-    title: "Compare providers",
-    description: "Evaluate models side by side on the same benchmark.",
+    title: "Evaluate models",
+    description: "Choose a model and a benchmark from the live catalog.",
   },
   {
-    icon: RotateCcw,
-    title: "Keep runs moving",
-    description: "Track progress and recovery when an evaluation fails.",
+    icon: Wallet,
+    title: "Fund your evaluation",
+    description: "Connect a wallet, fund a job, and track its status.",
   },
   {
-    icon: FileCheck2,
-    title: "Verify results",
-    description: "Keep a verifiable receipt alongside every result.",
+    icon: Server,
+    title: "Manage your providers",
+    description: "Register workers and manage capacity and model support.",
   },
 ] as const;
 
@@ -41,7 +36,7 @@ export default function Home() {
           </h1>
           <p className="text-muted-foreground mt-7 max-w-xl text-base leading-relaxed sm:text-lg">
             Benchmark models across providers on your private datasets. Compare
-            results, track every run, and keep a verifiable record.
+            models, fund evaluations, and track every run.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3 border-t pt-7 sm:mt-10 sm:pt-8">
             <Button
@@ -70,11 +65,11 @@ export default function Home() {
             </li>
             <li className="flex gap-4">
               <span className="font-mono text-xs leading-5">02</span>
-              Choose your providers
+              Choose a model and fund your job
             </li>
             <li className="flex gap-4">
               <span className="font-mono text-xs leading-5">03</span>
-              Review results and receipts
+              Review evaluation status and scores
             </li>
           </ol>
         </aside>

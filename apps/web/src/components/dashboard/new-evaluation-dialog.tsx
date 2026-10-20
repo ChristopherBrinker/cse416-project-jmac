@@ -1,10 +1,10 @@
 "use client";
 
+import { api } from "@cse416-project-jmac/backend/convex/_generated/api";
+import type { Id } from "@cse416-project-jmac/backend/convex/_generated/dataModel";
 import { Button } from "@cse416-project-jmac/ui/components/button";
-import { Checkbox } from "@cse416-project-jmac/ui/components/checkbox";
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -14,242 +14,299 @@ import {
 } from "@cse416-project-jmac/ui/components/dialog";
 import { Input } from "@cse416-project-jmac/ui/components/input";
 import { Label } from "@cse416-project-jmac/ui/components/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@cse416-project-jmac/ui/components/select";
-import { PlayIcon, PlusIcon } from "lucide-react";
+import { useMutation, useQuery } from "convex/react";
+import { PlusIcon } from "lucide-react";
 import { useId, useState } from "react";
 import type { FormEvent } from "react";
 
-import { formatCount } from "@/lib/evaluations";
-import {
-  BENCHMARKS,
-  PROVIDER_MODELS,
-  getBenchmark,
-} from "@/lib/mock-evaluations";
-import type { NewEvaluationInput } from "@/lib/mock-evaluations";
+import type { Benchmark, Model } from "@/lib/evaluations";
+import { truncateHash } from "@/lib/evaluations";
 
-const DEFAULT_BENCHMARK_ID = BENCHMARKS[0].id;
-const DEFAULT_PROVIDER_IDS: readonly string[] = [
-  "openai-gpt-4.1",
-  "anthropic-claude-sonnet-4",
-];
+import { useDashboardAction } from "./use-dashboard-action";
 
-const BENCHMARK_ITEMS = BENCHMARKS.map((benchmark) => ({
-  value: benchmark.id,
-  label: `${benchmark.name} v${benchmark.version}`,
-}));
-
-interface FormErrors {
-  name?: string;
-  providers?: string;
+interface SelectionProps {
+  group: string;
+  checked: boolean;
+  onSelect: () => void;
 }
 
-interface NewEvaluationDialogProps {
-  onCreate: (input: NewEvaluationInput) => void;
+function BenchmarkOption({
+  item,
+  group,
+  checked,
+  onSelect,
+}: SelectionProps & { item: Benchmark }) {
+  return (
+    <label
+      aria-label={item.name}
+      className="hover:bg-muted/60 has-checked:bg-muted flex cursor-pointer items-start gap-3 rounded-md p-2 text-xs"
+    >
+      <input
+        type="radio"
+        name={group}
+        value={item._id}
+        checked={checked}
+        onChange={onSelect}
+        className="accent-brand mt-0.5"
+      />
+      <span className="min-w-0 space-y-1">
+        <span className="block font-medium">
+          {item.name} v{item.version}
+        </span>
+        <span className="text-muted-foreground block">
+          By {item.ownerName} · {item.description}
+        </span>
+        <span
+          className="text-muted-foreground block font-mono break-all"
+          title={item.contentHash}
+        >
+          SHA-256: {truncateHash(item.contentHash)}
+        </span>
+        <span className="text-muted-foreground block font-mono break-all">
+          {item._id}
+        </span>
+      </span>
+    </label>
+  );
 }
 
-export function NewEvaluationDialog({ onCreate }: NewEvaluationDialogProps) {
+function ModelOption({
+  item,
+  group,
+  checked,
+  onSelect,
+}: SelectionProps & { item: Model }) {
+  return (
+    <label
+      aria-label={item.name}
+      className="hover:bg-muted/60 has-checked:bg-muted flex cursor-pointer items-start gap-3 rounded-md p-2 text-xs"
+    >
+      <input
+        type="radio"
+        name={group}
+        value={item._id}
+        checked={checked}
+        onChange={onSelect}
+        className="accent-brand mt-0.5"
+      />
+      <span className="min-w-0">
+        <span className="block font-medium">{item.name}</span>
+        <span className="text-muted-foreground block font-mono break-all">
+          {item._id}
+        </span>
+      </span>
+    </label>
+  );
+}
+
+const optionalSearch = (value: string): string | undefined =>
+  value.trim() || undefined;
+
+export function NewEvaluationDialog({
+  onCreate,
+}: {
+  onCreate: (jobId: Id<"jobs">) => void;
+}) {
   const fieldId = useId();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [benchmarkId, setBenchmarkId] = useState<string>(DEFAULT_BENCHMARK_ID);
-  const [providerIds, setProviderIds] = useState<string[]>([
-    ...DEFAULT_PROVIDER_IDS,
-  ]);
-  const [issueReceipt, setIssueReceipt] = useState(true);
-  const [errors, setErrors] = useState<FormErrors>({});
+  const [ownerName, setOwnerName] = useState("");
+  const [version, setVersion] = useState("");
+  const [modelName, setModelName] = useState("");
+  const [benchmark, setBenchmark] = useState<Benchmark | null>(null);
+  const [model, setModel] = useState<Model | null>(null);
+  const benchmarks: Benchmark[] | undefined = useQuery(
+    api.benchmark.getBenchmarks,
+    open
+      ? {
+          name: optionalSearch(name),
+          ownerName: optionalSearch(ownerName),
+          version: optionalSearch(version),
+        }
+      : "skip"
+  );
+  const models = useQuery(
+    api.model.getModels,
+    open ? { name: optionalSearch(modelName) } : "skip"
+  );
+  const createJob = useMutation(api.job.createJob);
+  const { pending, error, run } = useDashboardAction();
 
-  const benchmark = getBenchmark(benchmarkId);
-  const sampleTotal = (benchmark?.samples ?? 0) * providerIds.length;
-
-  const resetForm = () => {
-    setName("");
-    setBenchmarkId(DEFAULT_BENCHMARK_ID);
-    setProviderIds([...DEFAULT_PROVIDER_IDS]);
-    setIssueReceipt(true);
-    setErrors({});
-  };
-
-  const toggleProvider = (providerId: string, checked: boolean) => {
-    setProviderIds((current) =>
-      checked
-        ? [...current, providerId]
-        : current.filter((id) => id !== providerId)
-    );
-    setErrors((current) => ({ ...current, providers: undefined }));
-  };
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmedName = name.trim();
-    const providers = PROVIDER_MODELS.filter((model) =>
-      providerIds.includes(model.id)
-    );
-
-    const nextErrors: FormErrors = {};
-    if (trimmedName === "") {
-      nextErrors.name = "Give this evaluation a name.";
-    }
-    if (providers.length === 0) {
-      nextErrors.providers = "Select at least one provider.";
-    }
-    if (!benchmark || nextErrors.name || nextErrors.providers) {
-      setErrors(nextErrors);
+  const changeOpen = (value: boolean) => {
+    if (pending) {
       return;
     }
-
-    onCreate({ name: trimmedName, benchmark, providers, issueReceipt });
-    setOpen(false);
-    resetForm();
+    setOpen(value);
+    if (!value) {
+      setBenchmark(null);
+      setModel(null);
+      setName("");
+      setOwnerName("");
+      setVersion("");
+      setModelName("");
+    }
+  };
+  const create = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!benchmark || !model) {
+      return;
+    }
+    const succeeded = await run(async () => {
+      const result = await createJob({
+        benchmarkId: benchmark._id,
+        modelId: model._id,
+      });
+      if (!result.success || !result.jobId) {
+        throw new Error(result.error ?? "Could not create the evaluation.");
+      }
+      onCreate(result.jobId);
+    }, "Evaluation created. Fund it to start the run.");
+    if (succeeded) {
+      setOpen(false);
+      setBenchmark(null);
+      setModel(null);
+    }
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-        if (!nextOpen) {
-          resetForm();
-        }
-      }}
-    >
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger
         render={<Button className="w-fit rounded-full px-4" size="lg" />}
       >
         <PlusIcon data-icon="inline-start" />
         New evaluation
       </DialogTrigger>
-      <DialogContent className="rounded-xl sm:max-w-lg">
-        <form onSubmit={handleSubmit} noValidate className="grid gap-5">
+      <DialogContent className="max-h-[85svh] overflow-y-auto rounded-xl sm:max-w-2xl">
+        <form onSubmit={create} className="grid gap-5">
           <DialogHeader>
             <DialogTitle>Start a new evaluation</DialogTitle>
             <DialogDescription>
-              Samples stay inside the private worker pool. Only scores and the
-              signed result digest leave the enclave.
+              Choose a benchmark and a model. Create the job, then fund it from
+              the job details to begin evaluation.
             </DialogDescription>
           </DialogHeader>
-
-          <div className="grid gap-2">
-            <Label htmlFor={`${fieldId}-name`}>Name</Label>
-            <Input
-              id={`${fieldId}-name`}
-              value={name}
-              placeholder="e.g. Support triage · October candidate"
-              aria-invalid={errors.name ? true : undefined}
-              aria-describedby={
-                errors.name ? `${fieldId}-name-error` : undefined
-              }
-              onChange={(event) => {
-                setName(event.target.value);
-                setErrors((current) => ({ ...current, name: undefined }));
-              }}
-            />
-            {errors.name ? (
-              <p id={`${fieldId}-name-error`} className="text-destructive">
-                {errors.name}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor={`${fieldId}-benchmark`}>Benchmark suite</Label>
-            <Select
-              items={BENCHMARK_ITEMS}
-              value={benchmarkId}
-              onValueChange={(value) => {
-                if (value) {
-                  setBenchmarkId(value);
-                }
-              }}
-            >
-              <SelectTrigger id={`${fieldId}-benchmark`} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="rounded-lg">
-                {BENCHMARK_ITEMS.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {benchmark ? (
-              <p className="text-muted-foreground">
-                {benchmark.description} {formatCount(benchmark.samples)}{" "}
-                samples.
-              </p>
-            ) : null}
-          </div>
-
-          <fieldset
-            className="grid gap-2"
-            aria-describedby={
-              errors.providers ? `${fieldId}-providers-error` : undefined
-            }
-          >
-            <legend className="mb-2 text-xs">Providers</legend>
-            <div className="bg-border grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2">
-              {PROVIDER_MODELS.map((model) => (
-                <Label
-                  key={model.id}
-                  className="bg-popover hover:bg-muted/60 cursor-pointer items-start gap-2.5 p-2.5 leading-normal"
-                >
-                  <Checkbox
-                    className="mt-0.5"
-                    checked={providerIds.includes(model.id)}
-                    onCheckedChange={(checked) =>
-                      toggleProvider(model.id, checked)
-                    }
-                  />
-                  <span className="min-w-0">
-                    <span className="block font-medium">{model.provider}</span>
-                    <span className="text-muted-foreground block truncate font-mono">
-                      {model.model}
-                    </span>
-                  </span>
-                </Label>
+          <fieldset className="grid min-w-0 gap-3" disabled={pending}>
+            <legend className="mb-2 text-sm font-medium">
+              1. Choose a benchmark
+            </legend>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-1">
+                <Label htmlFor={`${fieldId}-name`}>Benchmark name</Label>
+                <Input
+                  id={`${fieldId}-name`}
+                  type="search"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Search benchmarks…"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor={`${fieldId}-owner`}>Owner</Label>
+                <Input
+                  id={`${fieldId}-owner`}
+                  value={ownerName}
+                  onChange={(event) => setOwnerName(event.target.value)}
+                  placeholder="Exact owner name"
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor={`${fieldId}-version`}>Version</Label>
+                <Input
+                  id={`${fieldId}-version`}
+                  value={version}
+                  onChange={(event) => setVersion(event.target.value)}
+                  placeholder="Exact version"
+                />
+              </div>
+            </div>
+            <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border p-2">
+              {benchmarks === undefined ? (
+                <output className="text-muted-foreground p-2">
+                  Loading benchmarks…
+                </output>
+              ) : null}
+              {benchmarks?.length === 0 ? (
+                <p className="text-muted-foreground p-2">
+                  No benchmarks found. Try another search or upload a benchmark.
+                </p>
+              ) : null}
+              {benchmarks?.map((item) => (
+                <BenchmarkOption
+                  key={item._id}
+                  item={item}
+                  group={`${fieldId}-benchmark`}
+                  checked={benchmark?._id === item._id}
+                  onSelect={() => setBenchmark(item)}
+                />
               ))}
             </div>
-            {errors.providers ? (
-              <p id={`${fieldId}-providers-error`} className="text-destructive">
-                {errors.providers}
+            {benchmark ? (
+              <p className="text-brand">
+                Selected: {benchmark.name} v{benchmark.version} by{" "}
+                {benchmark.ownerName}
               </p>
             ) : null}
-          </fieldset>
-
-          <Label className="cursor-pointer items-start gap-2.5 leading-normal">
-            <Checkbox
-              className="mt-0.5"
-              checked={issueReceipt}
-              onCheckedChange={setIssueReceipt}
-            />
-            <span>
-              <span className="block font-medium">Issue a signed receipt</span>
-              <span className="text-muted-foreground block">
-                Anchor the result digest on Base Sepolia when the run completes.
-              </span>
-            </span>
-          </Label>
-
-          <DialogFooter className="items-center sm:justify-between">
-            <p className="text-muted-foreground tabular-nums">
-              {formatCount(sampleTotal)} samples across {providerIds.length}{" "}
-              {providerIds.length === 1 ? "provider" : "providers"}
+            <p className="text-muted-foreground">
+              Showing up to 20 matches. Refine your search to find a specific
+              benchmark.
             </p>
-            <div className="flex gap-2">
-              <DialogClose render={<Button type="button" variant="outline" />}>
-                Cancel
-              </DialogClose>
-              <Button type="submit">
-                <PlayIcon data-icon="inline-start" />
-                Start evaluation
-              </Button>
+          </fieldset>
+          <fieldset className="grid gap-3" disabled={pending}>
+            <legend className="mb-2 text-sm font-medium">
+              2. Choose a model
+            </legend>
+            <div className="grid gap-1">
+              <Label htmlFor={`${fieldId}-model`}>Model name</Label>
+              <Input
+                id={`${fieldId}-model`}
+                type="search"
+                value={modelName}
+                onChange={(event) => setModelName(event.target.value)}
+                placeholder="Search models…"
+              />
             </div>
+            <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border p-2">
+              {models === undefined ? (
+                <output className="text-muted-foreground p-2">
+                  Loading models…
+                </output>
+              ) : null}
+              {models?.length === 0 ? (
+                <p className="text-muted-foreground p-2">
+                  No models found. Try a different search.
+                </p>
+              ) : null}
+              {models?.map((item) => (
+                <ModelOption
+                  key={item._id}
+                  item={item}
+                  group={`${fieldId}-model`}
+                  checked={model?._id === item._id}
+                  onSelect={() => setModel(item)}
+                />
+              ))}
+            </div>
+            {model ? (
+              <p className="text-brand">Selected: {model.name}</p>
+            ) : null}
+            <p className="text-muted-foreground">
+              Showing up to 20 matches. Providers are assigned after funding.
+            </p>
+          </fieldset>
+          {error ? (
+            <p role="alert" className="text-destructive">
+              {error}
+            </p>
+          ) : null}
+          <DialogFooter className="items-center sm:justify-between">
+            <p className="text-muted-foreground">
+              {benchmark && model
+                ? "Ready to create. The job will show its funding price."
+                : "Select a benchmark and a model to continue."}
+            </p>
+            <Button type="submit" disabled={pending || !benchmark || !model}>
+              {pending ? "Creating…" : "Create evaluation"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
