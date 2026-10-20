@@ -129,8 +129,9 @@ This contains information useful for interacting with the convex backend
     - `providerId : Id<"providers">`
     - `secret : string`
   - Updates lastHeartbeat for the provider
-  - Will be regularly called by the providers (using secret)
-    - [NOT IMPLEMENTED YET] The backend will eventually make scheduled checks for whichever `ready` provider neglects to call heartbeat, setting status to `disconnected`
+  - Should be regularly called by active providers (using secret)
+    - The scheduler makes regular checks for whichever `ready` provider neglects to call heartbeat, setting status to `disconnected`
+      - The current timeout is 60 seconds. The scheduler makes this check every 60 seconds, so status may not update for up to 120 seconds
 
 - `getUserProviders` : query
   - `args`:

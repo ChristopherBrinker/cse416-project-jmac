@@ -267,7 +267,61 @@ export const heartbeat = mutation({
       lastHeartbeat: Date.now(),
     });
 
+    if (provider.status === "disconnected") {
+      await ctx.db.patch("providers", provider._id, { status: "ready" });
+      if (provider.currentJobs < provider.maxJobs) {
+        const mss = await ctx.db
+          .query("model_support")
+          .withIndex("by_providerId", (q) => q.eq("providerId", provider._id))
+          .collect();
+        await Promise.all(
+          mss.map(async (ms) => {
+            await ctx.db.patch("model_support", ms._id, { available: true });
+          })
+        );
+      }
+    }
+
     return { success: true };
+  },
+});
+
+export const checkHeartbeats = mutation({
+  args: { backendKey: v.string() },
+  handler: async (ctx, args) => {
+    if (!process.env.BACKEND_CONVEX_KEY) {
+      throw new Error("BACKEND_CONVEX_KEY not set in convex");
+    }
+    if (args.backendKey !== process.env.BACKEND_CONVEX_KEY) {
+      return { success: false, error: "Invalid key" };
+    }
+
+    // 1 minute is the cutoff for hearbeat
+    const heartbeatCutoff = Date.now() - 1000 * 60;
+
+    const disconnected = await ctx.db
+      .query("providers")
+      .withIndex("by_status_lastHeartbeat", (q) =>
+        q.eq("status", "ready").lt("lastHeartbeat", heartbeatCutoff)
+      )
+      .collect();
+
+    await Promise.all(
+      disconnected.map(async (p) => {
+        await ctx.db.patch("providers", p._id, { status: "disconnected" });
+        const mss = await ctx.db
+          .query("model_support")
+          .withIndex("by_providerId", (q) => q.eq("providerId", p._id))
+          .collect();
+        await Promise.all(
+          mss.map(async (ms) => {
+            await ctx.db.patch("model_support", ms._id, { available: false });
+          })
+        );
+      })
+    );
+
+    return { success: true, modifiedCount: disconnected.length };
   },
 });
 
