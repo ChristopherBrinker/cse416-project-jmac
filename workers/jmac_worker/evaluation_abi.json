@@ -1,0 +1,118 @@
+[
+  {
+    "type": "function",
+    "name": "commitResult",
+    "inputs": [
+      {
+        "name": "jobId",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "commit",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "jobs",
+    "inputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "creatorAddr",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "id",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "price",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "providerA",
+        "type": "tuple",
+        "internalType": "struct Provider",
+        "components": [
+          {
+            "name": "addr",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "id",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "commit",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "result",
+            "type": "bool[]",
+            "internalType": "bool[]"
+          },
+          {
+            "name": "flag",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ]
+      },
+      {
+        "name": "providerB",
+        "type": "tuple",
+        "internalType": "struct Provider",
+        "components": [
+          {
+            "name": "addr",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "id",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "commit",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "result",
+            "type": "bool[]",
+            "internalType": "bool[]"
+          },
+          {
+            "name": "flag",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ]
+      },
+      {
+        "name": "flag",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  }
+]

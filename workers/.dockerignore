@@ -5,6 +5,7 @@
 !uv.lock
 !jmac_worker/
 !jmac_worker/*.py
+!jmac_worker/evaluation_abi.json
 !examples/
 !examples/*.json
 !tests/

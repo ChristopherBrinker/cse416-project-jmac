@@ -75,7 +75,11 @@ def _reject_json_constant(_value: str) -> NoReturn:
 
 def load_benchmark(path: Path) -> Benchmark:
     """Load a UTF-8 benchmark and hash its original bytes, as the backend does."""
-    content = path.read_bytes()
+    return parse_benchmark(path.read_bytes())
+
+
+def parse_benchmark(content: bytes) -> Benchmark:
+    """Validate downloaded bytes without reserializing the benchmark."""
     document = _require_object(
         json.loads(content.decode("utf-8"), parse_constant=_reject_json_constant),
         "benchmark",

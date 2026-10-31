@@ -46,9 +46,35 @@ The optional `JMAC_HEARTBEAT_INTERVAL_SECONDS`, `JMAC_REQUEST_TIMEOUT_SECONDS`, 
 
 Secrets are sent only in the mutation body over HTTPS (HTTP is allowed only for loopback development), omitted from configuration representations, and never included in worker logs. Remote error text and Convex `logLines` are discarded, and HTTP redirects are rejected. The transport follows the [Convex HTTP mutation protocol](https://docs.convex.dev/http-api/).
 
-If the backend is unreachable or the process is forcibly killed, offline status cannot be guaranteed. The current backend does not yet schedule missing-heartbeat disconnection checks. Failed cleanup logs an explicit offline-status error so an operator can check the provider record.
+If the backend is unreachable or the process is forcibly killed, offline status cannot be guaranteed. The scheduler periodically checks missing heartbeats and cleans up timed-out jobs; it must be running for those checks to occur. Failed cleanup logs an explicit offline-status error so an operator can check the provider record.
 
-This mode manages presence only. The backend now exposes `job:getJobsForProvider` and an authorized `GET /benchmark` download, but the worker does not yet call either interface or execute assigned jobs. The Evaluation contract accepts result-hash commitments; the worker makes no contract calls, and reveal, result comparison, refunds, and payouts are not yet implemented.
+Without `--execute-jobs`, this mode manages presence only. To enable assignment execution, fill in `CONVEX_HTTP_URL` (the `.convex.site` HTTP actions origin), `JMAC_MODEL_ID` (the Convex model record ID for the exact pinned SmolLM2 model), and `JMAC_RESULTS_DIRECTORY` in `.env.provider`. This is an explicit deployment mapping: the worker rejects assignments for every other model ID. From `workers/`:
+
+```sh
+UV_CACHE_DIR=.cache/uv uv sync --extra inference --extra provider --locked
+UV_CACHE_DIR=.cache/uv uv run --env-file .env.provider --extra inference --extra provider --locked \
+  python -m jmac_worker.provider --execute-jobs --offline
+```
+
+The worker subscribes to `job:getJobsForProvider` with the registered provider ID and secret using the official Convex Python client. It downloads each assigned benchmark from `GET /benchmark`, validates the original bytes, and evaluates with the already loaded model. Downloads are limited to 16 MiB; redirects are rejected and remote error messages are discarded. Configure both origins for the same deployment. Benchmark query strings contain the provider secret and must not be logged by proxies or operators.
+
+One evaluation runs at a time while heartbeats continue. Private result files contain the ordinary evaluation metadata plus `assignment: {job_id, provider_id, model_id}`; filenames hash that identity to avoid interpreting IDs as filesystem paths. Successful files are written atomically with private permissions and skipped on redelivery or restart. Run only one worker per provider and retain its results directory. Removing a result permits reevaluation. Invalid saved results stop execution for inspection rather than being overwritten.
+
+If an assignment disappears during inference or shutdown starts, its result is discarded. Native inference must finish before graceful shutdown completes; allow longer container stop timeouts for long benchmarks. Download retries use the configured bounded retry policy. Evaluation failures are logged by exception type only, leave no success file, and are attempted once per process; restart to retry after resolving the cause. The backend currently supplies no expected benchmark hash or immutable model revision in assignments, so the worker records the downloaded content hash but cannot independently verify it against backend metadata.
+
+By default, assignment execution saves local results. Add `--commit-results` to submit them to `Evaluation.commitResult`. Configure `JMAC_RPC_URL`, `JMAC_CHAIN_ID`, `JMAC_CONTRACT_ADDRESS`, `JMAC_WALLET_ADDRESS`, and `JMAC_WALLET_PRIVATE_KEY` in the ignored runtime environment file; the address must match the wallet registered on the frontend. Use a dedicated funded development signer and one worker process per provider/wallet. Never commit the key. From `workers/`:
+
+```sh
+UV_CACHE_DIR=.cache/uv uv sync --extra inference --extra provider --extra chain --locked
+UV_CACHE_DIR=.cache/uv uv run --env-file .env.provider --extra inference --extra provider --extra chain --locked \
+  python -m jmac_worker.provider --execute-jobs --commit-results --offline
+```
+
+Commitments use **`keccak256(abi.encode(bool[] scores))`**, preserving benchmark item order (not packed encoding, JSON, SHA-256, or the whole result file). The encoding ID is `keccak256-abi-bool-array-v1`. For `[true, false, true]`, the commitment is `0x82adde6ab39febe48ad5f5f17de582c728211b545b1e17ad56bf2bb040e7dc7e`, independently checked with viem. Future contract reveal logic must use this same encoding; reveal is not currently available.
+
+The worker checks the configured chain, deployed contract code, signer address, and on-chain provider ID/address. It waits for on-chain assignment before signing. Every signed transaction is saved atomically beside its result as `<result-name>.commit.json` **before broadcast**, including its chain/contract/signer identity, commitment, signed bytes, and transaction hash. On restart it first checks the on-chain commitment and reconciles the saved transaction, rebroadcasting only the identical signed bytes when the node no longer knows it. Pending transactions block signing for later jobs. A matching on-chain commitment counts as success; a conflicting hash, reverted receipt, corrupt journal, or RPC failure stops the provider for inspection. Keep journals with their results and restart after fixing transient RPC failures. Do not delete an ambiguous transaction journal to force a new transaction. Confirmation currently means observed on-chain state, without an extra finality delay.
+
+Commitments do not mark backend assignments finished, free provider capacity, or report failures to the backend. Reveal, result comparison, refunds, and payouts remain separate contract/backend work.
 
 The [integration handoff](INTEGRATION.md) lists the backend and contract interfaces needed next, the remaining worker tasks, and the acceptance checks for a complete MVP job.
 
@@ -110,7 +136,7 @@ docker build --platform linux/amd64 -t jmac-worker:0.4.0-amd64 workers
 docker build --platform linux/arm64 -t jmac-worker:0.4.0-arm64 workers
 ```
 
-Cross-architecture builds need Docker emulation or a matching native builder. Compare repeated runs of the same image and architecture; matching results across architectures or between macOS and Linux are not guaranteed. The runtime reports its actual Python/package versions and OS/architecture. The image supports one-shot CPU evaluation and the separate provider presence lifecycle. Assignment polling and contract calls remain separate work.
+Cross-architecture builds need Docker emulation or a matching native builder. Compare repeated runs of the same image and architecture; matching results across architectures or between macOS and Linux are not guaranteed. The runtime reports its actual Python/package versions and OS/architecture. The image supports one-shot CPU evaluation and the separate provider presence lifecycle. Assignment subscriptions and local result saving are available with `--execute-jobs`; contract commitments are available with `--commit-results`. For container execution, also pass `--execute-jobs`, mount a private writable results directory, and set `JMAC_RESULTS_DIRECTORY` to its container path (for example `/output/assignments`).
 
 Rebuild the image from the current source before verification. Version `0.4.0` writes boolean score arrays using result schema `2.0.0`; earlier `0.3.0` images and exported archives write integer scores and do not include this change. Verification reports and exported images are local artifacts excluded from Git.
 
@@ -188,7 +214,7 @@ The worker checks the output directory and writability before loading a benchmar
 
 ## Development checks
 
-From `workers/`, after setup:
+From `workers/`, install the provider and chain extras as well as inference dependencies before running the complete test suite (`uv sync --extra inference --extra provider --extra chain --locked`). Then run:
 
 ```sh
 .venv/bin/python -m unittest discover -s tests -v
@@ -212,4 +238,4 @@ PYTHONPATH=. .venv/bin/python scripts/verify-provider.py \
 
 This uses cached model files and a local Convex-compatible HTTP stub. It starts real provider subprocesses, injects a temporary HTTP 503 failure, checks successful heartbeats, sends SIGTERM and SIGINT, and verifies offline cleanup and secret-safe logs. If a provider exits during startup, the script reports its exit code and captured output immediately, with the test credential redacted. A startup timeout stops and waits for the child before capturing its output, preserving diagnostics without reading a shared log file while it is still being written. It needs permission to open a loopback port. This verifies transport and lifecycle against the current API contract, not authentication against a deployed Convex project. Live verification needs an actual registered provider ID and secret in `.env.provider`.
 
-Benchmark validation lives in `jmac_worker/benchmark.py`, model inference in `jmac_worker/inference.py`, and scoring in `jmac_worker/scoring.py`. Provider transport is in `jmac_worker/provider_api.py`; the lifecycle is in `jmac_worker/provider.py`. Connecting the worker to the existing assignment/download APIs and implementing contract commit/reveal integration are subsequent milestones.
+Benchmark validation lives in `jmac_worker/benchmark.py`, model inference in `jmac_worker/inference.py`, and scoring in `jmac_worker/scoring.py`. Provider transport is in `jmac_worker/provider_api.py`; the lifecycle is in `jmac_worker/provider.py`. Assignment subscriptions and evaluation orchestration live in `jmac_worker/jobs.py`. Commitment signing and transaction reconciliation live in `jmac_worker/commitments.py`; reveal and settlement integration remain pending.

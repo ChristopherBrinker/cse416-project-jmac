@@ -1,4 +1,4 @@
-"""Run the provider presence lifecycle; assignment execution is not available yet."""
+"""Run provider presence and optional assignment execution."""
 
 import argparse
 import logging
@@ -79,6 +79,7 @@ def run_provider(
     client: ProviderClient,
     model_loader: Callable[[], LocalModelRunner],
     stop: Event,
+    job_service: Callable[[LocalModelRunner, Event], None] | None = None,
 ) -> None:
     try:
         _call_with_retries(lambda: client.set_status("offline"), config, stop)
@@ -106,6 +107,10 @@ def run_provider(
             return
         _call_with_retries(client.heartbeat, config, stop)
         _call_with_retries(lambda: client.set_status("ready"), config, stop)
+        if job_service is not None:
+            LOGGER.info("Provider ready. Subscribing to assigned jobs.")
+            job_service(runner, stop)
+            return
         LOGGER.info(
             "Provider ready. Sending heartbeats; assignment execution is not enabled."
         )
@@ -148,6 +153,16 @@ def main() -> None:
     )
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIRECTORY)
     parser.add_argument(
+        "--commit-results",
+        action="store_true",
+        help="Submit saved assignment scores to the contract (requires --execute-jobs and chain extra)",
+    )
+    parser.add_argument(
+        "--execute-jobs",
+        action="store_true",
+        help="Subscribe to assigned jobs and save local results (requires provider extra)",
+    )
+    parser.add_argument(
         "--offline",
         action="store_true",
         help="Use cached model files only; backend requests still use networking",
@@ -155,11 +170,27 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     try:
+        if args.commit_results and not args.execute_jobs:
+            raise ValueError("--commit-results requires --execute-jobs")
         config = config_from_environment(os.environ)
+        client = ProviderClient(config)
+        job_service = None
+        if args.execute_jobs:
+            from .jobs import job_config_from_environment, run_jobs
+
+            jobs = job_config_from_environment(os.environ)
+            jobs.output_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+            commit_result = None
+            if args.commit_results:
+                from .commitments import CommitmentClient, chain_config_from_environment
+
+                chain = CommitmentClient(chain_config_from_environment(os.environ))
+                commit_result = chain.submit
+            job_service = partial(run_jobs, jobs, client, commit_result=commit_result)
         stop = Event()
         loader = partial(LocalModelRunner, args.cache_dir, offline=args.offline)
         with shutdown_signals(stop):
-            run_provider(config, ProviderClient(config), loader, stop)
+            run_provider(config, client, loader, stop, job_service)
     except (ValueError, ProviderAPIError, ModelStartupError) as error:
         parser.exit(1, f"error: {error}\n")
     except Exception:

@@ -7,10 +7,11 @@ from ipaddress import ip_address
 from math import isfinite
 from typing import Literal
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlencode, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 MAX_RESPONSE_BYTES = 65_536
+MAX_BENCHMARK_BYTES = 16 * 1024 * 1024
 
 
 class ProviderAPIError(RuntimeError):
@@ -21,7 +22,7 @@ class ProviderAPIError(RuntimeError):
         self.retryable = retryable
 
 
-def validate_deployment_url(value: str) -> str:
+def validate_deployment_url(value: str, *, http_actions: bool = False) -> str:
     try:
         parsed = urlsplit(value)
         hostname = (parsed.hostname or "").encode("idna").decode("ascii").rstrip(".")
@@ -39,7 +40,9 @@ def validate_deployment_url(value: str) -> str:
             "CONVEX_URL must be a deployment origin without credentials or a path"
         ) from None
 
-    if hostname == "convex.site" or hostname.endswith(".convex.site"):
+    if not http_actions and (
+        hostname == "convex.site" or hostname.endswith(".convex.site")
+    ):
         raise ValueError(
             "Use the .convex.cloud deployment URL, not the .convex.site HTTP actions URL"
         )
@@ -100,6 +103,36 @@ class ProviderClient:
 
     def heartbeat(self) -> None:
         self._mutation("provider:heartbeat", {})
+
+    def download_benchmark(self, http_url: str, job_id: str) -> bytes:
+        origin = validate_deployment_url(http_url, http_actions=True)
+        query = urlencode(
+            {
+                "jobId": job_id,
+                "providerId": self.config.provider_id,
+                "secret": self.config.secret,
+            }
+        )
+        request = Request(f"{origin}/benchmark?{query}", method="GET")
+        try:
+            with self._opener.open(
+                request, timeout=self.config.request_timeout
+            ) as response:
+                content = response.read(MAX_BENCHMARK_BYTES + 1)
+        except HTTPError as error:
+            status = error.code
+            error.close()
+            raise ProviderAPIError(
+                f"Benchmark download returned HTTP {status}.",
+                retryable=status == 429 or 500 <= status <= 599,
+            ) from None
+        except (URLError, OSError, HTTPException):
+            raise ProviderAPIError(
+                "Cannot download the assigned benchmark.", retryable=True
+            ) from None
+        if len(content) > MAX_BENCHMARK_BYTES:
+            raise ProviderAPIError("Assigned benchmark exceeds the download limit.")
+        return content
 
     def set_status(self, status: Literal["ready", "offline"]) -> None:
         if status not in ("ready", "offline"):

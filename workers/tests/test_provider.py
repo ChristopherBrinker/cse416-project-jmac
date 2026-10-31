@@ -262,6 +262,15 @@ class ProviderLifecycleTests(unittest.TestCase):
         )
         self.stop.wait.assert_has_calls([call(15.0), call(15.0)])
 
+    def test_job_service_starts_after_ready_and_receives_loaded_runner(self) -> None:
+        service = Mock(side_effect=lambda *_: self.events.append("jobs"))
+        run_provider(self.config, self.client, self.loader, self.stop, service)
+        self.assertEqual(
+            self.events,
+            ["offline", "load", "warmup", "heartbeat", "ready", "jobs", "offline"],
+        )
+        service.assert_called_once_with(self.runner, self.stop)
+
     def test_model_failure_never_marks_ready_and_attempts_offline(self) -> None:
         self.loader.side_effect = RuntimeError(SECRET)
         with self.assertLogs("jmac_worker.provider", level="ERROR") as logs:
