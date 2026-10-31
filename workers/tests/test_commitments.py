@@ -55,6 +55,18 @@ class TransactionTests(unittest.TestCase):
                         "model_id": "model",
                     },
                     "scores": SCORES,
+                    "schema_version": "2.0.0",
+                    "predictions": [1, 0, 1],
+                    "item_ids": ["a", "b", "c"],
+                    "total": 3,
+                    "correct": 2,
+                    "accuracy": 2 / 3,
+                    "benchmark": {
+                        "name": "example",
+                        "version": "1",
+                        "content_hash": "a" * 64,
+                    },
+                    "inference": {"revision": "pinned"},
                 }
             )
         )
@@ -166,7 +178,17 @@ class TransactionTests(unittest.TestCase):
         self.client.submit(self.path)
         result = json.loads(self.path.read_bytes())
         result["scores"] = [False, False, True]
+        result["correct"] = 1
+        result["accuracy"] = 1 / 3
         self.path.write_text(json.dumps(result))
         with self.assertRaisesRegex(ValueError, "identity"):
             self.client.submit(self.path)
         self.eth.send_raw_transaction.assert_called_once()
+
+    def test_truncated_scores_cannot_be_committed(self):
+        result = json.loads(self.path.read_bytes())
+        result["scores"] = [True]
+        self.path.write_text(json.dumps(result))
+        with self.assertRaisesRegex(ValueError, "invalid"):
+            self.client.submit(self.path)
+        self.eth.send_raw_transaction.assert_not_called()

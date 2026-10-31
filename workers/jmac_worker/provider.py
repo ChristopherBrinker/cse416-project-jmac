@@ -176,9 +176,16 @@ def main() -> None:
         client = ProviderClient(config)
         job_service = None
         if args.execute_jobs:
-            from .jobs import job_config_from_environment, run_jobs
+            from .jobs import (
+                job_config_from_environment,
+                require_subscription_dependency,
+                run_jobs,
+            )
+            from .provider_api import validate_benchmark_origin
 
+            require_subscription_dependency()
             jobs = job_config_from_environment(os.environ)
+            validate_benchmark_origin(jobs.http_url, config.deployment_url)
             jobs.output_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
             commit_result = None
             if args.commit_results:

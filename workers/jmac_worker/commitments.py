@@ -8,6 +8,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from .output import atomic_output
 from .provider_api import validate_deployment_url
+from .scoring import is_valid_saved_evaluation
 
 ENCODING = "keccak256-abi-bool-array-v1"
 ZERO_COMMIT = bytes(32)
@@ -110,6 +111,10 @@ class CommitmentClient:
         if not self.web3.eth.get_code(self.contract_address):
             raise ValueError("No contract deployed at JMAC_CONTRACT_ADDRESS")
         result = json.loads(result_path.read_bytes())
+        if not is_valid_saved_evaluation(result):
+            raise ValueError(
+                "Saved assignment result is invalid; inspect the results directory"
+            )
         assignment = result["assignment"]
         digest = score_commitment(result["scores"])
         job = self.contract.functions.jobs(assignment["job_id"]).call()

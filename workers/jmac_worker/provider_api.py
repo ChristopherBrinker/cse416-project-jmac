@@ -61,6 +61,23 @@ def validate_deployment_url(value: str, *, http_actions: bool = False) -> str:
     return urlunsplit((parsed.scheme, netloc, "", "", ""))
 
 
+def validate_benchmark_origin(value: str, deployment_url: str | None = None) -> str:
+    origin = validate_deployment_url(value, http_actions=True)
+    hostname = urlsplit(origin).hostname or ""
+    if hostname == "convex.cloud" or hostname.endswith(".convex.cloud"):
+        raise ValueError(
+            "CONVEX_HTTP_URL must use the HTTP actions origin, not .convex.cloud"
+        )
+    if deployment_url is not None:
+        deployment = urlsplit(validate_deployment_url(deployment_url))
+        expected = deployment.hostname or ""
+        if expected.endswith(".convex.cloud"):
+            expected = expected.removesuffix(".convex.cloud") + ".convex.site"
+        if hostname != expected or urlsplit(origin).scheme != deployment.scheme:
+            raise ValueError("CONVEX_HTTP_URL must belong to the configured deployment")
+    return origin
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderConfig:
     deployment_url: str
@@ -105,7 +122,7 @@ class ProviderClient:
         self._mutation("provider:heartbeat", {})
 
     def download_benchmark(self, http_url: str, job_id: str) -> bytes:
-        origin = validate_deployment_url(http_url, http_actions=True)
+        origin = validate_benchmark_origin(http_url, self.config.deployment_url)
         query = urlencode(
             {
                 "jobId": job_id,

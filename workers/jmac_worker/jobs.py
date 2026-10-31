@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
 from hashlib import sha256
+from importlib import import_module
 from pathlib import Path
 from threading import Event
 from typing import Protocol
@@ -14,8 +15,8 @@ from typing import Protocol
 from .benchmark import parse_benchmark
 from .inference import LocalModelRunner, Question
 from .output import atomic_output
-from .provider_api import ProviderAPIError, ProviderClient, validate_deployment_url
-from .scoring import RESULT_SCHEMA_VERSION, score_benchmark
+from .provider_api import ProviderAPIError, ProviderClient, validate_benchmark_origin
+from .scoring import is_valid_saved_evaluation, score_benchmark
 
 LOGGER = logging.getLogger(__name__)
 SHUTDOWN_POLL_SECONDS = 0.1
@@ -29,9 +30,7 @@ class JobConfig:
     output_directory: Path
 
     def __post_init__(self) -> None:
-        object.__setattr__(
-            self, "http_url", validate_deployment_url(self.http_url, http_actions=True)
-        )
+        object.__setattr__(self, "http_url", validate_benchmark_origin(self.http_url))
         if not self.model_id or any(character.isspace() for character in self.model_id):
             raise ValueError("JMAC_MODEL_ID must identify the pinned model in Convex")
 
@@ -89,13 +88,19 @@ class Subscription(Protocol):
     def unsubscribe(self) -> None: ...
 
 
-def subscribe(client: ProviderClient) -> Subscription:
+def require_subscription_dependency() -> None:
     try:
-        from convex import ConvexClient
+        import_module("convex")
     except ImportError:
         raise ValueError(
             "Install the worker provider extra to execute assignments"
         ) from None
+
+
+def subscribe(client: ProviderClient) -> Subscription:
+    require_subscription_dependency()
+    from convex import ConvexClient
+
     sdk = ConvexClient(client.config.deployment_url)
     return sdk.subscribe(
         "job:getJobsForProvider",
@@ -116,12 +121,8 @@ def has_saved_result(config: JobConfig, assignment: Assignment) -> bool:
     try:
         document = json.loads(path.read_bytes())
         valid = (
-            isinstance(document, dict)
+            is_valid_saved_evaluation(document)
             and document.get("assignment") == assignment.identity()
-            and document.get("schema_version") == RESULT_SCHEMA_VERSION
-            and isinstance(document.get("scores"), list)
-            and bool(document["scores"])
-            and all(type(score) is bool for score in document["scores"])
         )
     except (ValueError, OSError):
         valid = False
@@ -210,7 +211,7 @@ async def execute_jobs(
                     except asyncio.CancelledError:
                         # Native inference cannot be cancelled safely. Drain it before
                         # releasing the runner; heartbeats remain active during this wait.
-                        await inference
+                        await asyncio.gather(inference, return_exceptions=True)
                         raise
                     if stop.is_set() or assignment not in latest:
                         continue

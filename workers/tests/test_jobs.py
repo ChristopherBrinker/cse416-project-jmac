@@ -253,3 +253,67 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
             self.runner.predict.assert_called_once()
             self.stop.set()
             await self.task
+
+    async def test_shutdown_finishes_when_draining_inference_raises(self):
+        entered, release = Event(), Event()
+        self.addCleanup(release.set)
+
+        def predict(_questions):
+            entered.set()
+            release.wait(2)
+            raise ValueError("synthetic inference failure")
+
+        self.runner.predict.side_effect = predict
+        await self.subscription.updates.put([RECORD])
+        await self.wait_for(entered.is_set)
+        self.stop.set()
+        await asyncio.sleep(0.15)
+        release.set()
+        done, _ = await asyncio.wait([self.task], timeout=0.5)
+        if not done:
+            self.task.cancel()
+            await asyncio.gather(self.task, return_exceptions=True)
+        self.assertTrue(done, "Inference error swallowed shutdown cancellation")
+        self.assertFalse(result_path(self.config, ASSIGNMENT).exists())
+
+
+class SavedResultTests(unittest.TestCase):
+    def test_inconsistent_saved_results_are_rejected(self):
+        from jmac_worker.jobs import evaluate
+
+        runner = Mock()
+        runner.predict.return_value = [1, 0, 1]
+        runner.metadata.return_value = {"revision": "pinned"}
+        document = evaluate(BENCHMARK, runner)
+        document["assignment"] = ASSIGNMENT.identity()
+        corruptions = {
+            "scores": [True],
+            "predictions": [0],
+            "item_ids": ["one"],
+            "total": 1,
+            "correct": 0,
+            "accuracy": 1.0,
+            "benchmark": {},
+            "inference": None,
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            config = JobConfig("https://example.convex.site", "model", Path(directory))
+            path = result_path(config, ASSIGNMENT)
+            for field, value in corruptions.items():
+                with self.subTest(field=field):
+                    path.write_text(json.dumps({**document, field: value}))
+                    with self.assertRaises(ValueError):
+                        has_saved_result(config, ASSIGNMENT)
+
+    def test_cloud_origin_is_rejected_for_benchmark_download(self):
+        with self.assertRaises(ValueError):
+            JobConfig("https://example.convex.cloud", "model", Path("output"))
+
+    def test_other_deployment_is_rejected_before_secret_is_sent(self):
+        client = ProviderClient(
+            ProviderConfig("https://example.convex.cloud", "provider", "secret")
+        )
+        client._opener = Mock()
+        with self.assertRaises(ValueError):
+            client.download_benchmark("https://other.convex.site", "job")
+        client._opener.open.assert_not_called()
