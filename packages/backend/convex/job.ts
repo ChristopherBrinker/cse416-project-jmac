@@ -119,6 +119,7 @@ export const assignProviders = mutation({
       await ctx.db.insert("job_assignments", {
         jobId: job._id,
         providerId: p._id,
+        modelId: job.modelId,
         finished: false,
       });
     }
