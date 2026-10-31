@@ -55,3 +55,51 @@ def score_benchmark(benchmark: Benchmark, predictions: object) -> EvaluationResu
         scores.append(prediction == item.correct_choice)
 
     return EvaluationResult(benchmark, tuple(validated_predictions), tuple(scores))
+
+
+def is_valid_saved_evaluation(document: object) -> bool:
+    """Check score-vector integrity and the metadata needed to reuse a model result."""
+    if (
+        not isinstance(document, dict)
+        or document.get("schema_version") != RESULT_SCHEMA_VERSION
+    ):
+        return False
+    scores = document.get("scores")
+    predictions = document.get("predictions")
+    item_ids = document.get("item_ids")
+    if (
+        not isinstance(scores, list)
+        or not scores
+        or any(type(score) is not bool for score in scores)
+    ):
+        return False
+    if not isinstance(predictions, list) or len(predictions) != len(scores):
+        return False
+    if any(type(prediction) is not int or prediction < 0 for prediction in predictions):
+        return False
+    if not isinstance(item_ids, list) or len(item_ids) != len(scores):
+        return False
+    if any(not isinstance(item_id, str) or not item_id for item_id in item_ids):
+        return False
+    correct = document.get("correct")
+    total = document.get("total")
+    accuracy = document.get("accuracy")
+    if type(correct) is not int or correct != sum(scores):
+        return False
+    if type(total) is not int or total != len(scores):
+        return False
+    if type(accuracy) not in (int, float) or accuracy != correct / total:
+        return False
+    benchmark = document.get("benchmark")
+    if not isinstance(benchmark, dict):
+        return False
+    if not isinstance(benchmark.get("name"), str) or not benchmark["name"]:
+        return False
+    if not isinstance(benchmark.get("version"), str):
+        return False
+    content_hash = benchmark.get("content_hash")
+    if not isinstance(content_hash, str) or len(content_hash) != 64:
+        return False
+    if any(character not in "0123456789abcdef" for character in content_hash):
+        return False
+    return isinstance(document.get("inference"), dict)

@@ -18,7 +18,7 @@ FROM base AS dependencies
 COPY --from=ghcr.io/astral-sh/uv:0.12.3@sha256:2d890623d310b57771ce840f0da5eed5fc6d657da05ffaa45d82797b53fa3abc /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock .python-version ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    UV_LINK_MODE=copy uv sync --locked --extra inference --no-dev \
+    UV_LINK_MODE=copy uv sync --locked --extra inference --extra provider --extra chain --no-dev \
     --python /usr/local/bin/python --no-python-downloads
 
 FROM dependencies AS model

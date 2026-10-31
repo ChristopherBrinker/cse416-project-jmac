@@ -262,6 +262,15 @@ class ProviderLifecycleTests(unittest.TestCase):
         )
         self.stop.wait.assert_has_calls([call(15.0), call(15.0)])
 
+    def test_job_service_starts_after_ready_and_receives_loaded_runner(self) -> None:
+        service = Mock(side_effect=lambda *_: self.events.append("jobs"))
+        run_provider(self.config, self.client, self.loader, self.stop, service)
+        self.assertEqual(
+            self.events,
+            ["offline", "load", "warmup", "heartbeat", "ready", "jobs", "offline"],
+        )
+        service.assert_called_once_with(self.runner, self.stop)
+
     def test_model_failure_never_marks_ready_and_attempts_offline(self) -> None:
         self.loader.side_effect = RuntimeError(SECRET)
         with self.assertLogs("jmac_worker.provider", level="ERROR") as logs:
@@ -484,6 +493,31 @@ class ProviderCommandTests(unittest.TestCase):
             self.assertEqual(error.exception.code, 1)
             self.assertIn("Set CONVEX_URL", stderr.getvalue())
             loader.assert_not_called()
+
+    def test_missing_subscription_dependency_fails_before_provider_startup(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            with (
+                patch("sys.argv", ["jmac_worker.provider", "--execute-jobs"]),
+                patch.dict(
+                    "os.environ",
+                    {
+                        **ENVIRONMENT,
+                        "CONVEX_HTTP_URL": "https://example.convex.site",
+                        "JMAC_MODEL_ID": "model",
+                        "JMAC_RESULTS_DIRECTORY": directory,
+                    },
+                    clear=True,
+                ),
+                patch.dict("sys.modules", {"convex": None}),
+                patch("jmac_worker.provider.run_provider") as run,
+                patch("sys.stderr", new_callable=io.StringIO) as stderr,
+            ):
+                with self.assertRaises(SystemExit):
+                    main()
+                self.assertIn("provider extra", stderr.getvalue())
+                run.assert_not_called()
 
     def test_unexpected_exception_is_not_printed(self) -> None:
         with (
