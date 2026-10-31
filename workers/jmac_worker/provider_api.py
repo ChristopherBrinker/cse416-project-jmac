@@ -63,7 +63,10 @@ def validate_deployment_url(value: str, *, http_actions: bool = False) -> str:
 
 def validate_benchmark_origin(value: str, deployment_url: str | None = None) -> str:
     origin = validate_deployment_url(value, http_actions=True)
-    hostname = urlsplit(origin).hostname or ""
+    parsed_origin = urlsplit(origin)
+    hostname = parsed_origin.hostname or ""
+    if hostname.endswith(".convex.site") and (parsed_origin.port or 443) != 443:
+        raise ValueError("CONVEX_HTTP_URL must use HTTPS port 443 for hosted Convex")
     if hostname == "convex.cloud" or hostname.endswith(".convex.cloud"):
         raise ValueError(
             "CONVEX_HTTP_URL must use the HTTP actions origin, not .convex.cloud"
@@ -73,7 +76,7 @@ def validate_benchmark_origin(value: str, deployment_url: str | None = None) -> 
         expected = deployment.hostname or ""
         if expected.endswith(".convex.cloud"):
             expected = expected.removesuffix(".convex.cloud") + ".convex.site"
-        if hostname != expected or urlsplit(origin).scheme != deployment.scheme:
+        if hostname != expected or parsed_origin.scheme != deployment.scheme:
             raise ValueError("CONVEX_HTTP_URL must belong to the configured deployment")
     return origin
 

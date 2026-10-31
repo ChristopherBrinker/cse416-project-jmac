@@ -317,3 +317,30 @@ class SavedResultTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             client.download_benchmark("https://other.convex.site", "job")
         client._opener.open.assert_not_called()
+
+    def test_hosted_benchmark_port_is_rejected_before_secret_is_sent(self):
+        client = ProviderClient(
+            ProviderConfig("https://example.convex.cloud", "provider", "secret")
+        )
+        client._opener = Mock()
+        with self.assertRaises(ValueError):
+            client.download_benchmark("https://example.convex.site:8443", "job")
+        client._opener.open.assert_not_called()
+
+    def test_default_https_port_is_equivalent_for_hosted_benchmarks(self):
+        from jmac_worker.provider_api import validate_benchmark_origin
+
+        self.assertEqual(
+            validate_benchmark_origin(
+                "https://example.convex.site:443", "https://example.convex.cloud"
+            ),
+            "https://example.convex.site:443",
+        )
+
+    def test_local_http_actions_can_use_separate_configured_port(self):
+        from jmac_worker.provider_api import validate_benchmark_origin
+
+        self.assertEqual(
+            validate_benchmark_origin("http://localhost:3211", "http://localhost:3210"),
+            "http://localhost:3211",
+        )
