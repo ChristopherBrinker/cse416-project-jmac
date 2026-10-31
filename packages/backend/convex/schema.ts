@@ -40,6 +40,7 @@ export default defineSchema({
   job_assignments: defineTable({
     jobId: v.id("jobs"),
     providerId: v.id("providers"),
+    modelId: v.id("models"),
     finished: v.boolean(),
   })
     .index("by_providerId_finished", ["providerId", "finished"])
