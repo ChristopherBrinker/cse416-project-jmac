@@ -1,6 +1,19 @@
 [
   {
     "type": "function",
+    "name": "claimPayment",
+    "inputs": [
+      {
+        "name": "jobId",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "commitResult",
     "inputs": [
       {
@@ -139,6 +152,69 @@
       },
       {
         "name": "commitDeadline",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "revealResult",
+    "inputs": [
+      {
+        "name": "jobId",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "scores",
+        "type": "bool[]",
+        "internalType": "bool[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "CommitComplete",
+    "inputs": [
+      {
+        "name": "jobId",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "JobComplete",
+    "inputs": [
+      {
+        "name": "jobId",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "scores",
+        "type": "bool[]",
+        "indexed": false,
+        "internalType": "bool[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "function",
+    "name": "REVEAL_WINDOW",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }

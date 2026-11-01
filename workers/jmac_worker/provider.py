@@ -155,7 +155,7 @@ def main() -> None:
     parser.add_argument(
         "--commit-results",
         action="store_true",
-        help="Submit saved assignment scores to the contract (requires --execute-jobs and chain extra)",
+        help="Commit, reveal after CommitComplete, and claim after JobComplete (requires --execute-jobs and chain extra)",
     )
     parser.add_argument(
         "--execute-jobs",
@@ -188,12 +188,20 @@ def main() -> None:
             validate_benchmark_origin(jobs.http_url, config.deployment_url)
             jobs.output_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
             commit_result = None
+            settle_result = None
             if args.commit_results:
                 from .commitments import CommitmentClient, chain_config_from_environment
 
                 chain = CommitmentClient(chain_config_from_environment(os.environ))
-                commit_result = chain.submit
-            job_service = partial(run_jobs, jobs, client, commit_result=commit_result)
+                commit_result = chain.advance
+                settle_result = chain.settle
+            job_service = partial(
+                run_jobs,
+                jobs,
+                client,
+                commit_result=commit_result,
+                settle_result=settle_result,
+            )
         stop = Event()
         loader = partial(LocalModelRunner, args.cache_dir, offline=args.offline)
         with shutdown_signals(stop):

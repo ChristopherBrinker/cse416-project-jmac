@@ -344,3 +344,123 @@ class SavedResultTests(unittest.TestCase):
             validate_benchmark_origin("http://localhost:3211", "http://localhost:3210"),
             "http://localhost:3211",
         )
+
+
+class SettlementRecoveryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_removed_assignment_is_settled_from_saved_result(self):
+        from unittest.mock import patch
+
+        from jmac_worker.jobs import evaluate
+
+        with tempfile.TemporaryDirectory() as directory:
+            config = JobConfig("https://example.convex.site", "model", Path(directory))
+            runner = Mock()
+            runner.predict.return_value = [1, 0, 1]
+            runner.metadata.return_value = {"revision": "pinned"}
+            document = evaluate(BENCHMARK, runner)
+            document["assignment"] = ASSIGNMENT.identity()
+            path = result_path(config, ASSIGNMENT)
+            path.write_text(json.dumps(document))
+            runner.reset_mock()
+            client = Mock(spec=ProviderClient)
+            client.config = ProviderConfig(
+                "https://example.convex.cloud",
+                "provider",
+                "secret",
+                heartbeat_interval=0.1,
+            )
+            stop = Event()
+            subscription = FakeSubscription()
+            await subscription.updates.put([])
+            commit = Mock(return_value=False)
+            settle = Mock(side_effect=lambda _: stop.set() or True)
+            with patch("jmac_worker.jobs.COMMIT_POLL_SECONDS", 0.01):
+                await asyncio.wait_for(
+                    execute_jobs(
+                        config, client, runner, stop, subscription, commit, settle
+                    ),
+                    2,
+                )
+            settle.assert_called_once_with(path)
+            commit.assert_not_called()
+            runner.predict.assert_not_called()
+
+    async def test_terminal_settlement_is_rechecked_after_state_reorg(self):
+        from unittest.mock import patch
+
+        from jmac_worker.jobs import evaluate
+
+        with tempfile.TemporaryDirectory() as directory:
+            config = JobConfig("https://example.convex.site", "model", Path(directory))
+            runner = Mock()
+            runner.predict.return_value = [1, 0, 1]
+            runner.metadata.return_value = {"revision": "pinned"}
+            document = evaluate(BENCHMARK, runner)
+            document["assignment"] = ASSIGNMENT.identity()
+            result_path(config, ASSIGNMENT).write_text(json.dumps(document))
+            client = Mock(spec=ProviderClient)
+            client.config = ProviderConfig(
+                "https://example.convex.cloud",
+                "provider",
+                "secret",
+                heartbeat_interval=0.1,
+            )
+            stop = Event()
+            subscription = FakeSubscription()
+            await subscription.updates.put([])
+            settle = Mock(side_effect=[True, False, True])
+
+            def reconcile(_):
+                result = settle()
+                if settle.call_count == 3:
+                    stop.set()
+                return result
+
+            with patch("jmac_worker.jobs.COMMIT_POLL_SECONDS", 0.01):
+                await asyncio.wait_for(
+                    execute_jobs(
+                        config, client, runner, stop, subscription, Mock(), reconcile
+                    ),
+                    2,
+                )
+            self.assertEqual(settle.call_count, 3)
+
+    async def assert_settlement_only_recovers(self, assignments):
+        from jmac_worker.jobs import evaluate
+
+        with tempfile.TemporaryDirectory() as directory:
+            config = JobConfig("https://example.convex.site", "model", Path(directory))
+            runner = Mock()
+            runner.predict.return_value = [1, 0, 1]
+            runner.metadata.return_value = {"revision": "pinned"}
+            document = evaluate(BENCHMARK, runner)
+            document["assignment"] = ASSIGNMENT.identity()
+            path = result_path(config, ASSIGNMENT)
+            path.write_text(json.dumps(document))
+            runner.reset_mock()
+            client = Mock(spec=ProviderClient)
+            client.config = ProviderConfig(
+                "https://example.convex.cloud",
+                "provider",
+                "secret",
+                heartbeat_interval=0.1,
+            )
+            stop = Event()
+            subscription = FakeSubscription()
+            await subscription.updates.put(assignments)
+            settle = Mock(side_effect=lambda _: stop.set() or True)
+            await asyncio.wait_for(
+                execute_jobs(
+                    config, client, runner, stop, subscription, settle_result=settle
+                ),
+                1,
+            )
+            settle.assert_called_once_with(path)
+            client.download_benchmark.assert_not_called()
+            runner.predict.assert_not_called()
+
+    async def test_settlement_only_recovers_removed_assignment(self):
+        await self.assert_settlement_only_recovers([])
+
+    async def test_settlement_only_recovers_active_assignment(self):
+        await self.assert_settlement_only_recovers([RECORD])

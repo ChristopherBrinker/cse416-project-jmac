@@ -9,8 +9,8 @@ Current source capabilities (deployment verification remains outstanding):
 - `provider:setStatus` and `provider:heartbeat` accept a registered provider ID and secret. The worker implements these calls, loads and warms the model before becoming ready, and attempts offline cleanup on shutdown.
 - The scheduler observes `JobFunded`, calls `job:assignProviders`, and submits the selected providers to the contract. The backend stores `job_assignments` and exposes `job:getJobsForProvider` using the provider ID and secret.
 - The backend exposes an assignment-authorized `GET /benchmark?jobId=&providerId=&secret=` download. The opt-in `--execute-jobs` worker now subscribes to assignments, downloads benchmarks, and saves local evaluation results while continuing heartbeats. See the [backend guide](../packages/backend/README.md).
-- `contracts/src/Evaluation.sol` implements funding, provider assignment, and `commitResult(jobId, bytes32)`. It stores one nonzero commitment per assigned provider and emits `CommitComplete` once both are stored. It has a `bool[]` result field, but no reveal/comparison, `JobComplete`/`JobFailed`, refund, or payout functions.
-- The worker now supports opt-in `--commit-results` with a dedicated registered-wallet signer. It uses `keccak256(abi.encode(bool[] scores))`, validates the on-chain assignment, and persists signed transactions before broadcasting so restarts reconcile instead of signing duplicates. Live deployment verification remains outstanding.
+- `contracts/src/Evaluation.sol` implements funding, provider assignment, and `commitResult(jobId, bytes32)`. It stores one nonzero commitment per assigned provider and emits `CommitComplete` once both are stored. It now implements `revealResult`, score comparison, `JobComplete`/`JobFailed`, provider `claimPayment`, creator `refund`, and commit/reveal deadlines.
+- The worker now supports opt-in `--commit-results` with a dedicated registered-wallet signer. It uses `keccak256(abi.encode(bool[] scores))`, validates the on-chain assignment, and persists signed transactions before broadcasting so restarts reconcile instead of signing duplicates. The worker now reveals only after the matching `CommitComplete` event and claims only after `JobComplete`. Durable phase journals and event replay support restart and assignment removal. Live deployment verification remains outstanding.
 
 Local unit tests and real-model lifecycle checks against a Convex-compatible HTTP stub pass. Authentication against an actual deployment still needs a registered provider's credentials; no live deployment verification has been performed.
 
@@ -29,11 +29,11 @@ For the first model, map the backend model record to `HuggingFaceTB/SmolLM2-135M
 
 ## Contract handoff
 
-The registry/escrow owner has supplied the initial contract and ABIs. Deployment configuration, commit/reveal deadlines, and the rest of the result lifecycle still need agreement before adding worker transaction code:
+The registry/escrow owner has supplied the initial contract and ABIs. The contract now defines the settlement flow and 30-minute commit / 15-minute reveal windows. Current integration boundaries:
 
 - The requested contract result is the ordered boolean score vector (`[true, false, ...]`). The worker writes this boolean array directly in result schema `2.0.0`, with one correctness value per benchmark item; predictions remain integer choice indices. Worker metadata varies across machines and should not accidentally become part of result agreement.
-- The implemented worker encoding is `keccak256(abi.encode(bool[] scores))` with no salt or additional binding, matching the requested hash of scores. The current contract stores arbitrary nonzero bytes32 values. Future reveal logic must use exactly this encoding, or the worker protocol must change together with it. The local JSON file itself is not hashed.
-- A reveal function that hashes the supplied boolean array, validates it against that provider's commitment, and compares both revealed arrays. Matching arrays should enable completion and separate payout claims; disagreement should enable failure and a separate refund. These functions and events are not yet implemented.
+- The implemented worker encoding is `keccak256(abi.encode(bool[] scores))` with no salt or additional binding, matching the requested hash of scores. The current contract stores arbitrary nonzero bytes32 values. The reveal implementation verifies exactly this encoding. The local JSON file itself is not hashed.
+- A reveal function that hashes the supplied boolean array, validates it against that provider's commitment, and compares both revealed arrays. Matching arrays should enable completion and separate payout claims; disagreement should enable failure and a separate refund. These functions and events are now implemented.
 - How workers observe commit completion, reveal results, handle failed transactions or expired jobs, and request payment. Confirm which responsibilities belong in the worker and which belong in the backend.
 
 ## Remaining worker work
@@ -41,7 +41,7 @@ The registry/escrow owner has supplied the initial contract and ABIs. Deployment
 1. Implemented: secret-authenticated assignment subscription and benchmark download (`--execute-jobs`).
 2. Check assignment ownership, deadlines, model revision, and benchmark hash; reject unsupported or changed inputs before inference.
 3. Implemented: one active evaluation while heartbeats continue; answer keys stay outside model inputs and private benchmark contents stay out of logs.
-4. Local successful results now persist by provider/job/model identity and are skipped after restart. Opt-in commitment submission now persists signed bytes before broadcast and reconciles existing on-chain state or pending transactions. Reveal and artifact submission remain to be implemented.
+4. Local successful results now persist by provider/job/model identity and are skipped after restart. Opt-in commitment submission now persists signed bytes before broadcast and reconciles existing on-chain state or pending transactions. Event-gated reveal and payment claims are implemented. Artifact submission remains separate work.
 5. Run the shared acceptance checks below against the actual backend and contract.
 
 ## MVP acceptance checks
@@ -55,4 +55,4 @@ The registry/escrow owner has supplied the initial contract and ABIs. Deployment
 
 ## Message for the team
 
-> The worker and Docker package are ready for local evaluation, and provider readiness/heartbeats are implemented. Main now has assignments, authorized benchmark downloads, and contract commitments. The opt-in worker now subscribes, downloads, evaluates, and saves results with restart deduplication. It still needs the expected benchmark hash from the backend and reveal/settlement integration; model mapping currently uses an explicit deployment configuration. The score output already uses boolean arrays matching `bool[]`. The worker now supports opt-in commitments using keccak256 of ABI-encoded bool[] scores, with durable transaction journals. Reveal/comparison, refunds, payouts, and deadlines remain contract work; reveal must match the implemented encoding. Live provider authentication is still unverified.
+> The worker and Docker package are ready for local evaluation, and provider readiness/heartbeats are implemented. Main now has assignments, authorized benchmark downloads, and contract commitments. The opt-in worker now subscribes, downloads, evaluates, and saves results with restart deduplication. It still needs the expected benchmark hash from the backend and backend event synchronization; model mapping currently uses an explicit deployment configuration. The score output already uses boolean arrays matching `bool[]`. The worker now supports opt-in commitments using keccak256 of ABI-encoded bool[] scores, with durable transaction journals. Reveal/comparison, refunds, payouts, and deadlines now exist in the contract. Worker settlement handles reveal and payment events; backend status synchronization and creator-initiated refunds remain separate. Live provider authentication is still unverified.
