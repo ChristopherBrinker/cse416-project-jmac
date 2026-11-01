@@ -284,7 +284,11 @@ async def execute_jobs(
                     continue
                 if not has_saved_result(config, assignment):
                     continue
-                callback = commit_result if assignment in latest else settle_result
+                callback = settle_result
+                if assignment in latest and commit_result is not None:
+                    callback = commit_result
+                if callback is None:
+                    continue
                 operation = asyncio.create_task(
                     asyncio.to_thread(callback, result_path(config, assignment))
                 )
@@ -308,7 +312,9 @@ async def execute_jobs(
     worker = asyncio.create_task(work())
     pulse = asyncio.create_task(heartbeat())
     shutdown = asyncio.create_task(stopped())
-    committer = asyncio.create_task(commit_saved_results()) if commit_result else None
+    committer = None
+    if commit_result is not None or settle_result is not None:
+        committer = asyncio.create_task(commit_saved_results())
     tasks = [receiver, worker, pulse, shutdown]
     if committer is not None:
         tasks.append(committer)

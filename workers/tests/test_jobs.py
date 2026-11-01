@@ -424,3 +424,43 @@ class SettlementRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     2,
                 )
             self.assertEqual(settle.call_count, 3)
+
+    async def assert_settlement_only_recovers(self, assignments):
+        from jmac_worker.jobs import evaluate
+
+        with tempfile.TemporaryDirectory() as directory:
+            config = JobConfig("https://example.convex.site", "model", Path(directory))
+            runner = Mock()
+            runner.predict.return_value = [1, 0, 1]
+            runner.metadata.return_value = {"revision": "pinned"}
+            document = evaluate(BENCHMARK, runner)
+            document["assignment"] = ASSIGNMENT.identity()
+            path = result_path(config, ASSIGNMENT)
+            path.write_text(json.dumps(document))
+            runner.reset_mock()
+            client = Mock(spec=ProviderClient)
+            client.config = ProviderConfig(
+                "https://example.convex.cloud",
+                "provider",
+                "secret",
+                heartbeat_interval=0.1,
+            )
+            stop = Event()
+            subscription = FakeSubscription()
+            await subscription.updates.put(assignments)
+            settle = Mock(side_effect=lambda _: stop.set() or True)
+            await asyncio.wait_for(
+                execute_jobs(
+                    config, client, runner, stop, subscription, settle_result=settle
+                ),
+                1,
+            )
+            settle.assert_called_once_with(path)
+            client.download_benchmark.assert_not_called()
+            runner.predict.assert_not_called()
+
+    async def test_settlement_only_recovers_removed_assignment(self):
+        await self.assert_settlement_only_recovers([])
+
+    async def test_settlement_only_recovers_active_assignment(self):
+        await self.assert_settlement_only_recovers([RECORD])
