@@ -133,6 +133,34 @@ def has_saved_result(config: JobConfig, assignment: Assignment) -> bool:
     return True
 
 
+def saved_assignments(config: JobConfig, provider_id: str) -> tuple[Assignment, ...]:
+    recovered = []
+    for path in config.output_directory.glob("*.json"):
+        # Excludes transaction/event journals and unrelated JSON files.
+        if len(path.stem) != 64 or any(c not in "0123456789abcdef" for c in path.stem):
+            continue
+        document = json.loads(path.read_bytes())
+        if not is_valid_saved_evaluation(document):
+            raise ValueError("Saved assignment result is invalid")
+        identity = document.get("assignment")
+        if not isinstance(identity, dict) or any(
+            not isinstance(identity.get(key), str) or not identity[key]
+            for key in ("job_id", "provider_id", "model_id")
+        ):
+            raise ValueError("Saved assignment identity is invalid")
+        assignment = Assignment(
+            identity["job_id"], identity["provider_id"], identity["model_id"]
+        )
+        if result_path(config, assignment) != path:
+            raise ValueError("Saved assignment filename does not match its identity")
+        if (
+            assignment.provider_id == provider_id
+            and assignment.model_id == config.model_id
+        ):
+            recovered.append(assignment)
+    return tuple(recovered)
+
+
 def evaluate(content: bytes, runner: LocalModelRunner) -> dict[str, object]:
     benchmark = parse_benchmark(content)
     questions = [
@@ -161,6 +189,7 @@ async def execute_jobs(
     stop: Event,
     subscription: Subscription,
     commit_result: Callable[[Path], bool] | None = None,
+    settle_result: Callable[[Path], bool] | None = None,
 ) -> None:
     latest: tuple[Assignment, ...] = ()
     changed = asyncio.Event()
@@ -241,15 +270,23 @@ async def execute_jobs(
     async def commit_saved_results() -> None:
         confirmed: set[Assignment] = set()
         while not stop.is_set():
-            for assignment in latest:
+            candidates = latest
+            if settle_result is not None:
+                candidates = tuple(
+                    dict.fromkeys(
+                        (*latest, *saved_assignments(config, client.config.provider_id))
+                    )
+                )
+            for assignment in candidates:
                 if stop.is_set():
                     return
                 if assignment.model_id != config.model_id or assignment in confirmed:
                     continue
                 if not has_saved_result(config, assignment):
                     continue
+                callback = commit_result if assignment in latest else settle_result
                 operation = asyncio.create_task(
-                    asyncio.to_thread(commit_result, result_path(config, assignment))
+                    asyncio.to_thread(callback, result_path(config, assignment))
                 )
                 try:
                     success = await asyncio.shield(operation)
@@ -258,13 +295,13 @@ async def execute_jobs(
                     raise
                 except Exception:
                     raise ProviderAPIError(
-                        "Contract commitment failed; inspect chain configuration and transaction journals."
+                        "Contract settlement failed; inspect chain configuration and transaction journals."
                     ) from None
-                if not success:
-                    # Resolve one pending transaction before signing for another job.
-                    break
-                confirmed.add(assignment)
-                LOGGER.info("Saved scores confirmed in the contract commitment.")
+                if success and settle_result is None:
+                    confirmed.add(assignment)
+                    LOGGER.info(
+                        "Saved job reached its terminal contract settlement state."
+                    )
             await asyncio.sleep(COMMIT_POLL_SECONDS)
 
     receiver = asyncio.create_task(receive())
@@ -298,12 +335,15 @@ def run_jobs(
     stop: Event,
     *,
     commit_result: Callable[[Path], bool] | None = None,
+    settle_result: Callable[[Path], bool] | None = None,
 ) -> None:
     config.output_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     subscription = subscribe(client)
     try:
         asyncio.run(
-            execute_jobs(config, client, runner, stop, subscription, commit_result)
+            execute_jobs(
+                config, client, runner, stop, subscription, commit_result, settle_result
+            )
         )
     finally:
         try:
