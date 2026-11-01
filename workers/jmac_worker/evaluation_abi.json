@@ -72,6 +72,16 @@
             "name": "flag",
             "type": "bool",
             "internalType": "bool"
+          },
+          {
+            "name": "revealed",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "claimed",
+            "type": "bool",
+            "internalType": "bool"
           }
         ]
       },
@@ -104,6 +114,16 @@
             "name": "flag",
             "type": "bool",
             "internalType": "bool"
+          },
+          {
+            "name": "revealed",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "claimed",
+            "type": "bool",
+            "internalType": "bool"
           }
         ]
       },
@@ -111,6 +131,11 @@
         "name": "flag",
         "type": "bool",
         "internalType": "bool"
+      },
+      {
+        "name": "status",
+        "type": "uint8",
+        "internalType": "enum JobStatus"
       }
     ],
     "stateMutability": "view"
