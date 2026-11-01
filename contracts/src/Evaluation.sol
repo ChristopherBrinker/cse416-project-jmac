@@ -17,6 +17,7 @@ struct Job {
     bool flag; // used to detect default job i.e. not in mapping
     // workers read these structs by tuple index, so only append new fields
     JobStatus status;
+    uint256 commitDeadline; // reveals close REVEAL_WINDOW after this
 }
 
 struct Provider {
@@ -30,6 +31,9 @@ struct Provider {
 }
 
 contract Evaluation {
+    uint256 public constant COMMIT_WINDOW = 30 minutes;
+    uint256 public constant REVEAL_WINDOW = 15 minutes;
+
     mapping(string => Job) public jobs;
 
     address backend;
@@ -53,6 +57,7 @@ contract Evaluation {
         j.id = jobId;
         j.price = msg.value;
         j.flag = true;
+        j.commitDeadline = block.timestamp + COMMIT_WINDOW;
         jobs[jobId] = j;
         emit JobFunded(jobId, msg.value);
     }
@@ -67,6 +72,7 @@ contract Evaluation {
         require(j.flag, "Job not found");
         // reassigning would reset commits already submitted
         require(!j.providerA.flag && !j.providerB.flag, "Providers already assigned");
+        require(block.timestamp <= j.commitDeadline, "Commit deadline passed");
 
         Provider memory providerA = Provider({
             addr: addressA,
@@ -105,6 +111,7 @@ contract Evaluation {
 
         Provider storage p = assignedProvider(j);
         require(p.commit == bytes32(0), "Already committed");
+        require(block.timestamp <= j.commitDeadline, "Commit deadline passed");
 
         p.commit = commit;
 
@@ -125,6 +132,7 @@ contract Evaluation {
         Provider storage p = assignedProvider(j);
         require(j.providerA.commit != bytes32(0) && j.providerB.commit != bytes32(0), "Commits incomplete");
         require(!p.revealed, "Already revealed");
+        require(block.timestamp <= j.commitDeadline + REVEAL_WINDOW, "Reveal deadline passed");
         // must match the worker's encoding in workers/jmac_worker/commitments.py
         require(keccak256(abi.encode(scores)) == p.commit, "Result does not match commit");
 
@@ -163,13 +171,24 @@ contract Evaluation {
     function refund(string memory jobId) external {
         Job storage j = jobs[jobId];
         require(j.flag, "Job not found");
-        require(j.status == JobStatus.Failed, "Job not refundable");
+        bool timedOut = j.status == JobStatus.Open && hasTimedOut(j);
+        require(j.status == JobStatus.Failed || timedOut, "Job not refundable");
         require(msg.sender == j.creatorAddr, "Unauthorized");
 
         j.status = JobStatus.Refunded;
+        if (timedOut) {
+            emit JobFailed(jobId);
+        }
 
         (bool success,) = msg.sender.call{value: j.price}("");
         require(success, "Transfer failed");
+    }
+
+    // Without both commits nothing can be revealed, so the job is over at the commit deadline.
+    function hasTimedOut(Job storage j) private view returns (bool) {
+        bool bothCommitted = j.providerA.commit != bytes32(0) && j.providerB.commit != bytes32(0);
+        uint256 deadline = bothCommitted ? j.commitDeadline + REVEAL_WINDOW : j.commitDeadline;
+        return block.timestamp > deadline;
     }
 
     function assignedProvider(Job storage j) private view returns (Provider storage) {

@@ -113,7 +113,7 @@ contract EvaluationSettlementTest is Test {
     }
 
     function status(string memory jobId) internal view returns (JobStatus) {
-        (,,,,,, JobStatus jobStatus) = evaluation.jobs(jobId);
+        (,,,,,, JobStatus jobStatus,) = evaluation.jobs(jobId);
         return jobStatus;
     }
 
@@ -204,7 +204,7 @@ contract EvaluationSettlementTest is Test {
     function test_RevealsAreStoredInTheJobsGetter() public {
         reachComplete();
 
-        (,,, Provider memory a, Provider memory b, bool flag,) = evaluation.jobs(JOB_ID);
+        (,,, Provider memory a, Provider memory b, bool flag,,) = evaluation.jobs(JOB_ID);
 
         assertTrue(flag);
         assertEq(a.addr, providerA);
@@ -495,5 +495,181 @@ contract EvaluationSettlementTest is Test {
         assertFalse(attacker.reentrySucceeded());
         assertEq(address(attacker).balance, PRICE);
         assertEq(address(evaluation).balance, PRICE);
+    }
+
+    function commitDeadline() internal view returns (uint256) {
+        return block.timestamp + evaluation.COMMIT_WINDOW();
+    }
+
+    function revealDeadline() internal view returns (uint256) {
+        return commitDeadline() + evaluation.REVEAL_WINDOW();
+    }
+
+    function test_WindowsMatchTheAgreedTiming() public view {
+        assertEq(evaluation.COMMIT_WINDOW(), 30 minutes);
+        assertEq(evaluation.REVEAL_WINDOW(), 15 minutes);
+    }
+
+    function test_CommitAllowedAtTheDeadline() public {
+        uint256 deadline = commitDeadline();
+        fundAndAssign(JOB_ID, PRICE, providerA, providerB);
+
+        vm.warp(deadline);
+        vm.prank(providerA);
+        evaluation.commitResult(JOB_ID, hashOf(scores));
+    }
+
+    function test_RevertWhen_CommitAfterTheDeadline() public {
+        uint256 deadline = commitDeadline();
+        fundAndAssign(JOB_ID, PRICE, providerA, providerB);
+
+        vm.warp(deadline + 1);
+        vm.prank(providerA);
+        vm.expectRevert("Commit deadline passed");
+        evaluation.commitResult(JOB_ID, hashOf(scores));
+    }
+
+    function test_RevertWhen_AssignAfterTheDeadline() public {
+        uint256 deadline = commitDeadline();
+        vm.prank(creator);
+        evaluation.fundJob{value: PRICE}(JOB_ID);
+
+        vm.warp(deadline + 1);
+        vm.prank(backend);
+        vm.expectRevert("Commit deadline passed");
+        evaluation.assignProviders(JOB_ID, providerA, "pA", providerB, "pB");
+    }
+
+    function test_RevealAllowedAtTheDeadline() public {
+        uint256 deadline = revealDeadline();
+        commitBoth(hashOf(scores), hashOf(scores));
+
+        vm.warp(deadline);
+        vm.prank(providerA);
+        evaluation.revealResult(JOB_ID, scores);
+    }
+
+    function test_RevertWhen_RevealAfterTheDeadline() public {
+        uint256 deadline = revealDeadline();
+        commitBoth(hashOf(scores), hashOf(scores));
+
+        vm.warp(deadline + 1);
+        vm.prank(providerA);
+        vm.expectRevert("Reveal deadline passed");
+        evaluation.revealResult(JOB_ID, scores);
+    }
+
+    function test_RefundWhenProvidersNeverAssigned() public {
+        uint256 deadline = commitDeadline();
+        vm.prank(creator);
+        evaluation.fundJob{value: PRICE}(JOB_ID);
+        uint256 balanceBefore = creator.balance;
+
+        vm.warp(deadline);
+        vm.prank(creator);
+        vm.expectRevert("Job not refundable");
+        evaluation.refund(JOB_ID);
+
+        vm.warp(deadline + 1);
+        vm.expectEmit(address(evaluation));
+        emit JobFailed(JOB_ID);
+        vm.prank(creator);
+        evaluation.refund(JOB_ID);
+
+        assertEq(creator.balance, balanceBefore + PRICE);
+        assertEq(uint8(status(JOB_ID)), uint8(JobStatus.Refunded));
+    }
+
+    function test_RefundAtCommitDeadlineWhenOneProviderNeverCommits() public {
+        uint256 deadline = commitDeadline();
+        fundAndAssign(JOB_ID, PRICE, providerA, providerB);
+        vm.prank(providerA);
+        evaluation.commitResult(JOB_ID, hashOf(scores));
+        uint256 balanceBefore = creator.balance;
+
+        vm.warp(deadline + 1);
+        vm.prank(creator);
+        evaluation.refund(JOB_ID);
+
+        assertEq(creator.balance, balanceBefore + PRICE);
+        assertEq(providerA.balance, 0);
+    }
+
+    function test_RevertWhen_RefundBeforeRevealDeadlineWithBothCommits() public {
+        uint256 deadline = revealDeadline();
+        commitBoth(hashOf(scores), hashOf(scores));
+
+        vm.warp(deadline);
+        vm.prank(creator);
+        vm.expectRevert("Job not refundable");
+        evaluation.refund(JOB_ID);
+    }
+
+    function test_NeitherProviderPaidWhenOneNeverReveals() public {
+        uint256 deadline = revealDeadline();
+        commitBoth(hashOf(scores), hashOf(scores));
+        vm.prank(providerA);
+        evaluation.revealResult(JOB_ID, scores);
+        uint256 balanceBefore = creator.balance;
+
+        vm.warp(deadline + 1);
+        vm.prank(providerA);
+        vm.expectRevert("Job not complete");
+        evaluation.claimPayment(JOB_ID);
+
+        vm.expectEmit(address(evaluation));
+        emit JobFailed(JOB_ID);
+        vm.prank(creator);
+        evaluation.refund(JOB_ID);
+
+        assertEq(creator.balance, balanceBefore + PRICE);
+        assertEq(providerA.balance, 0);
+        assertEq(address(evaluation).balance, 0);
+    }
+
+    function test_RevertWhen_TimeoutRefundTwice() public {
+        uint256 deadline = revealDeadline();
+        commitBoth(hashOf(scores), hashOf(scores));
+
+        vm.warp(deadline + 1);
+        vm.startPrank(creator);
+        evaluation.refund(JOB_ID);
+        vm.expectRevert("Job not refundable");
+        evaluation.refund(JOB_ID);
+        vm.stopPrank();
+    }
+
+    function test_RevertWhen_TimeoutRefundCallerNotCreator() public {
+        uint256 deadline = revealDeadline();
+        commitBoth(hashOf(scores), hashOf(scores));
+
+        vm.warp(deadline + 1);
+        vm.prank(outsider);
+        vm.expectRevert("Unauthorized");
+        evaluation.refund(JOB_ID);
+    }
+
+    function test_CompleteJobCannotBeRefundedAfterTheDeadline() public {
+        uint256 deadline = revealDeadline();
+        reachComplete();
+
+        vm.warp(deadline + 1);
+        vm.prank(creator);
+        vm.expectRevert("Job not refundable");
+        evaluation.refund(JOB_ID);
+
+        vm.prank(providerA);
+        evaluation.claimPayment(JOB_ID);
+        assertEq(providerA.balance, PRICE / 2);
+    }
+
+    function test_FailedJobRefundEmitsNoSecondJobFailed() public {
+        reachFailed();
+
+        vm.recordLogs();
+        vm.prank(creator);
+        evaluation.refund(JOB_ID);
+
+        assertEq(vm.getRecordedLogs().length, 0);
     }
 }
