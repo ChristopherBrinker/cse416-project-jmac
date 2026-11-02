@@ -80,7 +80,7 @@ export const assignProviders = mutation({
       return { success: false, error: "Price does not match" };
     }
 
-    if (!args.retry && job.status !== "created") {
+    if (job.status !== (args.retry ? "funded" : "created")) {
       return { success: false, error: "Job already funded" };
     }
     /* Mutation can return success: false without reverting this.
@@ -172,7 +172,12 @@ export const setStatus = mutation({
         statusTime: Date.now(),
       });
     } else if (args.status === "succeeded") {
-      if (args.score === undefined || args.score < 0 || args.score > 100) {
+      if (
+        args.score === undefined ||
+        !Number.isFinite(args.score) ||
+        args.score < 0 ||
+        args.score > 100
+      ) {
         return {
           success: false,
           error: "Invalid score (must be number between 0 and 100)",

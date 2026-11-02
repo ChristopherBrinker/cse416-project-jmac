@@ -87,7 +87,7 @@ async function main() {
   setInterval(
     async () => {
       try {
-        const timeout = COMMIT_WINDOW + REVEAL_WINDOW + 30 * 1000;
+        const timeout = (COMMIT_WINDOW + REVEAL_WINDOW) * 1000 + 30 * 1000;
         const result = await convexClient.mutation(api.job.cleanUp, {
           backendKey: BACKEND_CONVEX_KEY,
           timeout,
@@ -163,9 +163,13 @@ async function main() {
             const price = decoded.args.price as bigint;
 
             const result = await assignProviders(jobId, price, false);
-            if (!result.success) {
+            if (!result.success && result.error === "Providers unavailable") {
               setTimeout(async () => {
-                await assignProviders(jobId, price, true);
+                try {
+                  await assignProviders(jobId, price, true);
+                } catch {
+                  /* */
+                }
               }, 1000 * 60);
             }
           } else if (decoded.eventName === "JobFailed") {
@@ -195,7 +199,7 @@ async function main() {
                 correct++;
               }
             }
-            const score = correct / scores.length;
+            const score = (correct / scores.length) * 100;
 
             const statusResult = await convexClient.mutation(
               api.job.setStatus,
