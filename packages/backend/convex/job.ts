@@ -128,7 +128,12 @@ export const assignProviders = mutation({
 });
 
 export const setStatus = mutation({
-  args: { jobId: v.id("jobs"), status: v.string(), backendKey: v.string() },
+  args: {
+    jobId: v.id("jobs"),
+    status: v.string(),
+    score: v.optional(v.number()),
+    backendKey: v.string(),
+  },
   handler: async (ctx, args) => {
     if (!process.env.BACKEND_CONVEX_KEY) {
       throw new Error("BACKEND_CONVEX_KEY not set in convex");
@@ -156,10 +161,25 @@ export const setStatus = mutation({
       };
     }
 
-    await ctx.db.patch("jobs", job._id, {
-      status: args.status,
-      statusTime: Date.now(),
-    });
+    if (args.status === "failed") {
+      await ctx.db.patch("jobs", job._id, {
+        status: args.status,
+        statusTime: Date.now(),
+      });
+    } else if (args.status === "succeeded") {
+      if (args.score === undefined || args.score < 0 || args.score > 100) {
+        return {
+          success: false,
+          error: "Invalid score (must be number between 0 and 100)",
+        };
+      }
+
+      await ctx.db.patch("jobs", job._id, {
+        status: args.status,
+        statusTime: Date.now(),
+        score: args.score,
+      });
+    }
 
     const job_assignments = await ctx.db
       .query("job_assignments")

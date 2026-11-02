@@ -114,11 +114,11 @@ async function main() {
                 `Failed assignment for ${jobId}:`,
                 providerAssignment.error
               );
-              return;
+              continue;
             }
 
             if (!providerAssignment.providers) {
-              return;
+              continue;
             }
             const providers = providerAssignment.providers;
 
@@ -138,6 +138,54 @@ async function main() {
             const hash = await walletClient.writeContract(request);
             await publicClient.waitForTransactionReceipt({ hash });
             console.log(`Successful assignment for ${jobId}. Hash: ${hash}`);
+          } else if (decoded.eventName === "JobFailed") {
+            const jobId = decoded.args.jobId as Id<"jobs">;
+            const statusResult = await convexClient.mutation(
+              api.job.setStatus,
+              {
+                jobId,
+                status: "failed",
+                backendKey: BACKEND_CONVEX_KEY,
+              }
+            );
+            if (!statusResult.success) {
+              console.log(
+                `Failed to set status for ${jobId}:`,
+                statusResult.error
+              );
+              continue;
+            }
+            console.log(`Updated ${jobId} status to failed`);
+          } else if (decoded.eventName === "JobComplete") {
+            const jobId = decoded.args.jobId as Id<"jobs">;
+            const scores = decoded.args.scores as boolean[];
+            let correct = 0;
+            for (const s of scores) {
+              if (s) {
+                correct++;
+              }
+            }
+            const score = correct / scores.length;
+
+            const statusResult = await convexClient.mutation(
+              api.job.setStatus,
+              {
+                jobId,
+                status: "succeeded",
+                score,
+                backendKey: BACKEND_CONVEX_KEY,
+              }
+            );
+            if (!statusResult.success) {
+              console.log(
+                `Failed to set status for ${jobId}:`,
+                statusResult.error
+              );
+              continue;
+            }
+            console.log(
+              `Updated ${jobId} status to succeeded with score ${score}`
+            );
           } else {
             console.log(decoded);
           }

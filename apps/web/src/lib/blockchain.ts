@@ -44,7 +44,9 @@ export const getJobFundingStatus = async (jobId: string): Promise<boolean> => {
     functionName: "jobs",
     args: [jobId],
   });
-  if (!Array.isArray(job) || typeof job.at(-1) !== "boolean") {
+
+  // This check needs to be changed if the bottommost property of the Job struct changes
+  if (!Array.isArray(job) || typeof job.at(-1) !== "bigint") {
     throw new TypeError("Could not verify this job's funding status.");
   }
   return job.at(-1) === true;
