@@ -58,7 +58,12 @@ export const getUserJobs = query({
 });
 
 export const assignProviders = mutation({
-  args: { jobId: v.id("jobs"), price: v.int64(), backendKey: v.string() },
+  args: {
+    jobId: v.id("jobs"),
+    price: v.int64(),
+    retry: v.boolean(),
+    backendKey: v.string(),
+  },
   handler: async (ctx, args) => {
     if (!process.env.BACKEND_CONVEX_KEY) {
       throw new Error("BACKEND_CONVEX_KEY not set in convex");
@@ -75,7 +80,7 @@ export const assignProviders = mutation({
       return { success: false, error: "Price does not match" };
     }
 
-    if (job.status !== "created") {
+    if (job.status !== (args.retry ? "funded" : "created")) {
       return { success: false, error: "Job already funded" };
     }
     /* Mutation can return success: false without reverting this.
@@ -128,7 +133,12 @@ export const assignProviders = mutation({
 });
 
 export const setStatus = mutation({
-  args: { jobId: v.id("jobs"), status: v.string(), backendKey: v.string() },
+  args: {
+    jobId: v.id("jobs"),
+    status: v.string(),
+    score: v.optional(v.number()),
+    backendKey: v.string(),
+  },
   handler: async (ctx, args) => {
     if (!process.env.BACKEND_CONVEX_KEY) {
       throw new Error("BACKEND_CONVEX_KEY not set in convex");
@@ -156,10 +166,30 @@ export const setStatus = mutation({
       };
     }
 
-    await ctx.db.patch("jobs", job._id, {
-      status: args.status,
-      statusTime: Date.now(),
-    });
+    if (args.status === "failed") {
+      await ctx.db.patch("jobs", job._id, {
+        status: args.status,
+        statusTime: Date.now(),
+      });
+    } else if (args.status === "succeeded") {
+      if (
+        args.score === undefined ||
+        !Number.isFinite(args.score) ||
+        args.score < 0 ||
+        args.score > 100
+      ) {
+        return {
+          success: false,
+          error: "Invalid score (must be number between 0 and 100)",
+        };
+      }
+
+      await ctx.db.patch("jobs", job._id, {
+        status: args.status,
+        statusTime: Date.now(),
+        score: args.score,
+      });
+    }
 
     const job_assignments = await ctx.db
       .query("job_assignments")
@@ -207,7 +237,7 @@ export const getJobsForProvider = query({
 });
 
 export const cleanUp = mutation({
-  args: { backendKey: v.string() },
+  args: { backendKey: v.string(), timeout: v.number() },
   handler: async (ctx, args) => {
     if (!process.env.BACKEND_CONVEX_KEY) {
       throw new Error("BACKEND_CONVEX_KEY not set in convex");
@@ -216,8 +246,7 @@ export const cleanUp = mutation({
       return { success: false, error: "Invalid key" };
     }
 
-    // Timeout is 10 minutes
-    const jobTimeout = Date.now() - 1000 * 60 * 10;
+    const jobTimeout = Date.now() - args.timeout;
 
     const timedOutJobs = await ctx.db
       .query("jobs")

@@ -44,10 +44,11 @@ export const getJobFundingStatus = async (jobId: string): Promise<boolean> => {
     functionName: "jobs",
     args: [jobId],
   });
-  if (!Array.isArray(job) || typeof job.at(-1) !== "boolean") {
+
+  if (!Array.isArray(job) || typeof job.at(5) !== "boolean") {
     throw new TypeError("Could not verify this job's funding status.");
   }
-  return job.at(-1) === true;
+  return job.at(5) === true;
 };
 
 export const createBlockchainClient = async (key: `0x${string}`) => {

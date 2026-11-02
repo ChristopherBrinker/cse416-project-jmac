@@ -32,10 +32,42 @@ async function main() {
     throw new Error("Provide BACKEND_CONVEX_KEY");
   }
 
-  const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS;
+  const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS as `0x${string}`;
 
   const convexClient = new ConvexHttpClient(process.env.CONVEX_URL);
   const BACKEND_CONVEX_KEY = process.env.BACKEND_CONVEX_KEY;
+
+  const publicClient = createPublicClient({
+    chain: foundry,
+    transport: http(process.env.NET_URL),
+  });
+  const account = privateKeyToAccount(
+    process.env.BACKEND_WALLET_PRIVATE_KEY as `0x${string}`
+  );
+  const walletClient = createWalletClient({
+    account,
+    chain: foundry,
+    transport: http(),
+  });
+
+  const abiContents = await readFile("./abi.json", "utf-8");
+  const abiHolder = JSON.parse(abiContents);
+  const abi = abiHolder["abi"];
+
+  const COMMIT_WINDOW = Number(
+    await publicClient.readContract({
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "COMMIT_WINDOW",
+    })
+  );
+  const REVEAL_WINDOW = Number(
+    await publicClient.readContract({
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "REVEAL_WINDOW",
+    })
+  );
 
   setInterval(async () => {
     try {
@@ -55,8 +87,10 @@ async function main() {
   setInterval(
     async () => {
       try {
+        const timeout = (COMMIT_WINDOW + REVEAL_WINDOW) * 1000 + 30 * 1000;
         const result = await convexClient.mutation(api.job.cleanUp, {
           backendKey: BACKEND_CONVEX_KEY,
+          timeout,
         });
         if (!result.success) {
           console.log("Job cleanup failed:", result.error);
@@ -67,25 +101,52 @@ async function main() {
         console.log("Job cleanup error:", error);
       }
     },
-    1000 * 60 * 10
+    1000 * 60 * 2
   );
 
-  const publicClient = createPublicClient({
-    chain: foundry,
-    transport: http(process.env.NET_URL),
-  });
-  const account = privateKeyToAccount(
-    process.env.BACKEND_WALLET_PRIVATE_KEY as `0x${string}`
-  );
-  const walletClient = createWalletClient({
-    account,
-    chain: foundry,
-    transport: http(),
-  });
+  async function assignProviders(
+    jobId: Id<"jobs">,
+    price: bigint,
+    retry: boolean
+  ) {
+    const providerAssignment = await convexClient.mutation(
+      api.job.assignProviders,
+      {
+        jobId,
+        price,
+        retry,
+        backendKey: BACKEND_CONVEX_KEY,
+      }
+    );
 
-  const abiContents = await readFile("./abi.json", "utf-8");
-  const abiHolder = JSON.parse(abiContents);
-  const abi = abiHolder["abi"];
+    if (!providerAssignment.success) {
+      console.log(`Failed assignment for ${jobId}:`, providerAssignment.error);
+      return providerAssignment;
+    }
+
+    if (!providerAssignment.providers) {
+      return providerAssignment;
+    }
+    const providers = providerAssignment.providers;
+
+    const { request } = await publicClient.simulateContract({
+      account,
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "assignProviders",
+      args: [
+        jobId,
+        providers[0].walletAddress,
+        providers[0]._id,
+        providers[1].walletAddress,
+        providers[1]._id,
+      ],
+    });
+    const hash = await walletClient.writeContract(request);
+    await publicClient.waitForTransactionReceipt({ hash });
+    console.log(`Successful assignment for ${jobId}. Hash: ${hash}`);
+    return providerAssignment;
+  }
 
   publicClient.watchEvent({
     onLogs: async (logs) => {
@@ -100,44 +161,65 @@ async function main() {
           if (decoded.eventName === "JobFunded") {
             const jobId = decoded.args.jobId as Id<"jobs">;
             const price = decoded.args.price as bigint;
-            const providerAssignment = await convexClient.mutation(
-              api.job.assignProviders,
+
+            const result = await assignProviders(jobId, price, false);
+            if (!result.success && result.error === "Providers unavailable") {
+              setTimeout(async () => {
+                try {
+                  await assignProviders(jobId, price, true);
+                } catch {
+                  /* */
+                }
+              }, 1000 * 60);
+            }
+          } else if (decoded.eventName === "JobFailed") {
+            const jobId = decoded.args.jobId as Id<"jobs">;
+            const statusResult = await convexClient.mutation(
+              api.job.setStatus,
               {
                 jobId,
-                price,
+                status: "failed",
                 backendKey: BACKEND_CONVEX_KEY,
               }
             );
-
-            if (!providerAssignment.success) {
+            if (!statusResult.success) {
               console.log(
-                `Failed assignment for ${jobId}:`,
-                providerAssignment.error
+                `Failed to set status for ${jobId}:`,
+                statusResult.error
               );
-              return;
+              continue;
             }
-
-            if (!providerAssignment.providers) {
-              return;
+            console.log(`Updated ${jobId} status to failed`);
+          } else if (decoded.eventName === "JobComplete") {
+            const jobId = decoded.args.jobId as Id<"jobs">;
+            const scores = decoded.args.scores as boolean[];
+            let correct = 0;
+            for (const s of scores) {
+              if (s) {
+                correct++;
+              }
             }
-            const providers = providerAssignment.providers;
+            const score = (correct / scores.length) * 100;
 
-            const { request } = await publicClient.simulateContract({
-              account,
-              address: CONTRACT_ADDRESS as `0x${string}`,
-              abi,
-              functionName: "assignProviders",
-              args: [
+            const statusResult = await convexClient.mutation(
+              api.job.setStatus,
+              {
                 jobId,
-                providers[0].walletAddress,
-                providers[0]._id,
-                providers[1].walletAddress,
-                providers[1]._id,
-              ],
-            });
-            const hash = await walletClient.writeContract(request);
-            await publicClient.waitForTransactionReceipt({ hash });
-            console.log(`Successful assignment for ${jobId}. Hash: ${hash}`);
+                status: "succeeded",
+                score,
+                backendKey: BACKEND_CONVEX_KEY,
+              }
+            );
+            if (!statusResult.success) {
+              console.log(
+                `Failed to set status for ${jobId}:`,
+                statusResult.error
+              );
+              continue;
+            }
+            console.log(
+              `Updated ${jobId} status to succeeded with score ${score}`
+            );
           } else {
             console.log(decoded);
           }
