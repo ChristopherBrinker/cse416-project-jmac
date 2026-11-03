@@ -88,15 +88,66 @@ async function main() {
     async () => {
       try {
         const timeout = (COMMIT_WINDOW + REVEAL_WINDOW) * 1000 + 30 * 1000;
-        const result = await convexClient.mutation(api.job.cleanUp, {
+        const result = await convexClient.query(api.job.getTimedOutJobs, {
           backendKey: BACKEND_CONVEX_KEY,
           timeout,
         });
-        if (!result.success) {
+        if (!result.success || !result.jobIds) {
           console.log("Job cleanup failed:", result.error);
           return;
         }
-        console.log(`Job cleanup modified ${result.modifiedCount} records`);
+        console.log(`Job cleanup found ${result.jobIds.length} records`);
+
+        await Promise.all(
+          result.jobIds.map(async (id) => {
+            let endStateA: string | undefined;
+            let endStateB: string | undefined;
+
+            // Determine state of each provider
+            try {
+              const providerStates = (await publicClient.readContract({
+                address: CONTRACT_ADDRESS,
+                abi,
+                functionName: "getProviderStates",
+                args: [id],
+              })) as boolean[];
+
+              const commitComplete = providerStates[0] && providerStates[2];
+              if (commitComplete) {
+                endStateA = providerStates[1] ? "submitted" : "reveal_timeout";
+                endStateB = providerStates[3] ? "submitted" : "reveal_timeout";
+              } else {
+                endStateA = providerStates[0] ? "submitted" : "commit_timeout";
+                endStateB = providerStates[2] ? "submitted" : "commit_timeout";
+              }
+            } catch {
+              console.log(`Failed to get job ${id} from blockchain`);
+            }
+
+            try {
+              const statusResult = await convexClient.mutation(
+                api.job.setStatus,
+                {
+                  jobId: id,
+                  status: "failed",
+                  endStateA,
+                  endStateB,
+                  backendKey: BACKEND_CONVEX_KEY,
+                }
+              );
+              if (!statusResult.success) {
+                console.log(
+                  `Failed to set status for ${id}:`,
+                  statusResult.error
+                );
+                return;
+              }
+              console.log(`Updated ${id} status to failed`);
+            } catch (error) {
+              console.log(`Failed to set status for ${id}:`, error);
+            }
+          })
+        );
       } catch (error) {
         console.log("Job cleanup error:", error);
       }
@@ -179,6 +230,8 @@ async function main() {
               {
                 jobId,
                 status: "failed",
+                endStateA: "disagreement",
+                endStateB: "disagreement",
                 backendKey: BACKEND_CONVEX_KEY,
               }
             );
@@ -207,6 +260,8 @@ async function main() {
                 jobId,
                 status: "succeeded",
                 score,
+                endStateA: "succeeded",
+                endStateB: "succeeded",
                 backendKey: BACKEND_CONVEX_KEY,
               }
             );

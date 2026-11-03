@@ -42,6 +42,7 @@ export default defineSchema({
     providerId: v.id("providers"),
     modelId: v.id("models"),
     finished: v.boolean(),
+    endState: v.optional(v.string()),
   })
     .index("by_providerId_finished", ["providerId", "finished"])
     .index("by_jobId", ["jobId"])

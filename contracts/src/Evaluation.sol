@@ -200,4 +200,17 @@ contract Evaluation {
         }
         revert("Unauthorized");
     }
+
+    // Used by scheduler after timeout to determine who timed out and in what stage
+    // Returns [A_did_commit, A_did_reveal, B_did_commit, B_did_reveal]
+    function getProviderStates(string memory jobId) public view returns (bool[] memory) {
+        Job memory j = jobs[jobId];
+        require(j.flag, "Job not found");
+        bool[] memory ret = new bool[](4);
+        ret[0] = j.providerA.commit != bytes32(0);
+        ret[1] = j.providerA.revealed;
+        ret[2] = j.providerB.commit != bytes32(0);
+        ret[3] = j.providerB.revealed;
+        return ret;
+    }
 }

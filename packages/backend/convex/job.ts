@@ -137,6 +137,8 @@ export const setStatus = mutation({
     jobId: v.id("jobs"),
     status: v.string(),
     score: v.optional(v.number()),
+    endStateA: v.optional(v.string()),
+    endStateB: v.optional(v.string()),
     backendKey: v.string(),
   },
   handler: async (ctx, args) => {
@@ -196,8 +198,15 @@ export const setStatus = mutation({
       .withIndex("by_jobId", (q) => q.eq("jobId", job._id))
       .filter((q) => q.eq(q.field("finished"), false))
       .collect();
-    for (const ja of job_assignments) {
-      await ctx.db.patch("job_assignments", ja._id, { finished: true });
+
+    const endStates = [args.endStateA, args.endStateB];
+
+    for (let i = 0; i < Math.min(2, job_assignments.length); i++) {
+      const ja = job_assignments[i];
+      await ctx.db.patch("job_assignments", ja._id, {
+        finished: true,
+        endState: endStates[i],
+      });
 
       const p = (await ctx.db.get("providers", ja.providerId))!;
       await ctx.db.patch("providers", p._id, {
@@ -236,7 +245,7 @@ export const getJobsForProvider = query({
   },
 });
 
-export const cleanUp = mutation({
+export const getTimedOutJobs = query({
   args: { backendKey: v.string(), timeout: v.number() },
   handler: async (ctx, args) => {
     if (!process.env.BACKEND_CONVEX_KEY) {
@@ -255,34 +264,8 @@ export const cleanUp = mutation({
       )
       .collect();
 
-    for (const j of timedOutJobs) {
-      await ctx.db.patch("jobs", j._id, {
-        status: "failed",
-        statusTime: Date.now(),
-      });
-      const assignments = await ctx.db
-        .query("job_assignments")
-        .withIndex("by_jobId", (q) => q.eq("jobId", j._id))
-        .filter((q) => q.eq(q.field("finished"), false))
-        .collect();
-      for (const ja of assignments) {
-        await ctx.db.patch("job_assignments", ja._id, { finished: true });
-        const p = (await ctx.db.get("providers", ja.providerId))!;
-        await ctx.db.patch("providers", p._id, {
-          currentJobs: p.currentJobs - 1n,
-        });
-        if (p.currentJobs === p.maxJobs && p.status === "ready") {
-          const model_support = await ctx.db
-            .query("model_support")
-            .withIndex("by_providerId", (q) => q.eq("providerId", p._id))
-            .collect();
-          for (const ms of model_support) {
-            await ctx.db.patch("model_support", ms._id, { available: true });
-          }
-        }
-      }
-    }
+    const jobIds = timedOutJobs.map((j) => j._id);
 
-    return { success: true, modifiedCount: timedOutJobs.length };
+    return { success: true, jobIds };
   },
 });
