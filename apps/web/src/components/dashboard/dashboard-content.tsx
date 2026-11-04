@@ -9,30 +9,65 @@ import {
   TabsTrigger,
 } from "@cse416-project-jmac/ui/components/tabs";
 import { useConvexAuth, usePaginatedQuery, useQuery } from "convex/react";
-import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { useRef, useState } from "react";
 
-import {
-  getJobFundingStatus,
-  waitForTransactionSuccess,
-  writeJobTransaction,
-} from "@/lib/blockchain";
+import { describeWalletError } from "@/lib/blockchain";
 import type { Benchmark, EvaluationJob } from "@/lib/evaluations";
-import { getErrorMessage } from "@/lib/evaluations";
+import { getJobLifecycle } from "@/lib/job-lifecycle";
 
 import { BackendStatus } from "./backend-status";
 import { BenchmarkUploadDialog } from "./benchmark-upload-dialog";
 import { JobDetail } from "./job-detail";
-import type { FundingStatus, FundingTransaction } from "./job-detail";
 import { JobsPanel } from "./jobs-panel";
 import { NewEvaluationDialog } from "./new-evaluation-dialog";
 import { ProvidersPanel } from "./providers-panel";
 import { StatsOverview } from "./stats-overview";
 import { useBlockchainWallet } from "./use-blockchain-wallet";
-import { useJobRefund } from "./use-job-refund";
-import { WalletDialog } from "./wallet-dialog";
+import type { BlockchainWalletState } from "./use-blockchain-wallet";
+import { useJobActions, useOnChainJob } from "./use-job-actions";
+import { WalletDialog, WrongNetworkNotice } from "./wallet-dialog";
 
 const STACKED_LAYOUT_QUERY = "(max-width: 1023px)";
+
+function SelectedJobDetail({
+  job,
+  walletState,
+  actions,
+}: {
+  job: EvaluationJob;
+  walletState: BlockchainWalletState;
+  actions: ReturnType<typeof useJobActions>;
+}) {
+  const chainQuery = useOnChainJob(job._id);
+  const transactions = actions.transactions[job._id];
+  const lifecycle = getJobLifecycle({
+    convexStatus: job.status,
+    chainJob: chainQuery.data,
+    fundingTransaction: transactions?.funding,
+    refundTransaction: transactions?.refund,
+  });
+  return (
+    <JobDetail
+      job={job}
+      lifecycle={lifecycle}
+      chainJob={chainQuery.data}
+      chainError={
+        chainQuery.error ? describeWalletError(chainQuery.error) : undefined
+      }
+      wallet={{
+        address: walletState.address,
+        ready: walletState.wallet !== undefined,
+        wrongNetwork: walletState.wrongNetwork,
+      }}
+      transactions={transactions}
+      busyKind={actions.busy?.jobId === job._id ? actions.busy.kind : undefined}
+      actionsBusy={actions.busy !== null}
+      error={actions.errors[job._id] || undefined}
+      onFund={() => actions.fund(job)}
+      onRefund={() => actions.refund(job)}
+    />
+  );
+}
 
 function LiveDashboard() {
   const benchmarks: Benchmark[] | undefined = useQuery(
@@ -48,18 +83,7 @@ function LiveDashboard() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [section, setSection] = useState("evaluations");
   const walletState = useBlockchainWallet();
-  const { wallet } = walletState;
-  const [fundingJobId, setFundingJobId] = useState<string | null>(null);
-  const [transactions, setTransactions] = useState<
-    Record<string, FundingTransaction | undefined>
-  >({});
-  const [fundingErrors, setFundingErrors] = useState<Record<string, string>>(
-    {}
-  );
-  const [fundingStatuses, setFundingStatuses] = useState<
-    Record<string, FundingStatus>
-  >({});
-  const fundingLock = useRef(false);
+  const actions = useJobActions(walletState.wallet);
   const detailRef = useRef<HTMLElement>(null);
   const jobs: EvaluationJob[] = results.map((job) => ({
     ...job,
@@ -70,119 +94,12 @@ function LiveDashboard() {
   }));
   const selectedJob =
     jobs.find((job) => job._id === selectedJobId) ?? jobs[0] ?? null;
-  const createdJobId =
-    selectedJob?.status === "created" ? selectedJob._id : null;
-  const failedJobId = selectedJob?.status === "failed" ? selectedJob._id : null;
-  const { refundingJobId, getRefundState, refund } = useJobRefund(
-    wallet,
-    failedJobId
-  );
-
-  useEffect(() => {
-    if (!createdJobId) {
-      return;
-    }
-    let active = true;
-    const checkFunding = async () => {
-      try {
-        const funded = await getJobFundingStatus(createdJobId);
-        if (active) {
-          setFundingStatuses((current) => ({
-            ...current,
-            [createdJobId]: funded ? "funded" : "unfunded",
-          }));
-          setFundingErrors((current) => ({ ...current, [createdJobId]: "" }));
-        }
-      } catch (error) {
-        if (active) {
-          setFundingStatuses((current) => ({
-            ...current,
-            [createdJobId]: "error",
-          }));
-          setFundingErrors((current) => ({
-            ...current,
-            [createdJobId]: getErrorMessage(error),
-          }));
-        }
-      }
-    };
-    void checkFunding();
-    return () => {
-      active = false;
-    };
-  }, [createdJobId]);
 
   const selectJob = (jobId: string) => {
     setSelectedJobId(jobId);
     if (window.matchMedia(STACKED_LAYOUT_QUERY).matches) {
       detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  };
-  const fundJob = async (job: EvaluationJob) => {
-    if (
-      fundingLock.current ||
-      job.status !== "created" ||
-      transactions[job._id]?.confirmed ||
-      fundingStatuses[job._id] === "funded"
-    ) {
-      return;
-    }
-    fundingLock.current = true;
-    setFundingJobId(job._id);
-    setFundingErrors((current) => ({ ...current, [job._id]: "" }));
-    try {
-      const funded = await getJobFundingStatus(job._id);
-      setFundingStatuses((current) => ({
-        ...current,
-        [job._id]: funded ? "funded" : "unfunded",
-      }));
-      if (funded) {
-        toast.info(
-          "This job is already funded on-chain. Waiting for the scheduler to update it."
-        );
-      } else if (wallet && fundingStatuses[job._id] === "unfunded") {
-        let hash = transactions[job._id]?.hash;
-        if (!hash) {
-          const submittedHash = await writeJobTransaction(
-            wallet,
-            "fundJob",
-            job._id,
-            job.price
-          );
-          hash = submittedHash;
-          setTransactions((current) => ({
-            ...current,
-            [job._id]: { hash: submittedHash, confirmed: false },
-          }));
-        }
-        const succeeded = await waitForTransactionSuccess(hash);
-        if (succeeded) {
-          setFundingStatuses((current) => ({
-            ...current,
-            [job._id]: "funded",
-          }));
-          setTransactions((current) => ({
-            ...current,
-            [job._id]: { hash, confirmed: true },
-          }));
-          toast.success(
-            "Funding confirmed. Waiting for the scheduler to update the job."
-          );
-        } else {
-          const message =
-            "The funding transaction reverted. You can try again.";
-          setTransactions((current) => ({ ...current, [job._id]: undefined }));
-          setFundingErrors((current) => ({ ...current, [job._id]: message }));
-          toast.error(message);
-        }
-      }
-    } catch (error) {
-      const message = getErrorMessage(error);
-      setFundingErrors((current) => ({ ...current, [job._id]: message }));
-      toast.error(message);
-    }
-    fundingLock.current = false;
-    setFundingJobId(null);
   };
 
   return (
@@ -197,7 +114,7 @@ function LiveDashboard() {
         <div className="flex flex-wrap items-center gap-2">
           <WalletDialog
             walletState={walletState}
-            busy={fundingJobId !== null || refundingJobId !== null}
+            busy={actions.busy !== null}
           />
           <BenchmarkUploadDialog />
           <NewEvaluationDialog
@@ -208,6 +125,9 @@ function LiveDashboard() {
           />
         </div>
       </div>
+      {walletState.wrongNetwork ? (
+        <WrongNetworkNotice walletState={walletState} />
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <BackendStatus />
         <p className="text-muted-foreground text-xs">
@@ -237,20 +157,11 @@ function LiveDashboard() {
               className="min-w-0 scroll-mt-20 lg:sticky lg:top-20"
             >
               {selectedJob ? (
-                <JobDetail
+                <SelectedJobDetail
+                  key={selectedJob._id}
                   job={selectedJob}
-                  walletConnected={Boolean(wallet)}
-                  funding={fundingJobId === selectedJob._id}
-                  fundingBusy={fundingJobId !== null}
-                  fundingStatus={fundingStatuses[selectedJob._id] ?? "checking"}
-                  transaction={transactions[selectedJob._id]}
-                  error={fundingErrors[selectedJob._id]}
-                  onFund={() => fundJob(selectedJob)}
-                  walletAddress={wallet?.address}
-                  refundState={getRefundState(selectedJob._id)}
-                  refunding={refundingJobId === selectedJob._id}
-                  refundBusy={refundingJobId !== null}
-                  onRefund={() => refund(selectedJob._id)}
+                  walletState={walletState}
+                  actions={actions}
                 />
               ) : (
                 <div className="text-muted-foreground rounded-xl border p-8 text-center text-sm">

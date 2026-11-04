@@ -212,11 +212,6 @@ export const getOnChainJob = async (jobId: string): Promise<OnChainJob> => {
   };
 };
 
-export const getJobFundingStatus = async (jobId: string): Promise<boolean> => {
-  const { funded } = await getOnChainJob(jobId);
-  return funded;
-};
-
 export const createBrowserWallet = (
   walletClient: WalletClient<Transport, Chain, Account>
 ): BlockchainWallet => ({

@@ -8,7 +8,8 @@
     "check-types": "tsc --noEmit",
     "start": "next start --port 7346",
     "env:generate": "varlock codegen",
-    "lint": "oxlint ."
+    "lint": "oxlint .",
+    "test": "bun test src"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.12.5",
@@ -34,6 +35,7 @@
   "devDependencies": {
     "@cse416-project-jmac/config": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
+    "@types/bun": "^1.4.4",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",

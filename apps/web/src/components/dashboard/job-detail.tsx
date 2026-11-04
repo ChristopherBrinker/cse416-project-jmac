@@ -8,15 +8,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@cse416-project-jmac/ui/components/card";
-import {
-  CircleCheckIcon,
-  TriangleAlertIcon,
-  Undo2Icon,
-  WalletIcon,
-} from "lucide-react";
+import { TriangleAlertIcon, Undo2Icon, WalletIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { isSameAddress } from "@/lib/blockchain";
+import type { OnChainJob } from "@/lib/blockchain";
 import type { EvaluationJob } from "@/lib/evaluations";
 import {
   formatDateTime,
@@ -24,33 +20,34 @@ import {
   formatWei,
   truncateHash,
 } from "@/lib/evaluations";
+import type { JobLifecycle } from "@/lib/job-lifecycle";
 
 import { CopyButton } from "./copy-button";
-import { JobStatusBadge } from "./status-badge";
+import { explainFailure } from "./job-presentation";
+import { JobTimeline } from "./job-timeline";
+import { ProviderStatusList, ResultReceipt } from "./result-receipt";
+import { JobStageBadge } from "./status-badge";
+import type { JobTransactions } from "./use-job-actions";
 
-export interface JobTransaction {
-  hash: `0x${string}`;
-  confirmed: boolean;
+export interface WalletSummary {
+  address: string | undefined;
+  ready: boolean;
+  wrongNetwork: boolean;
 }
-export type FundingTransaction = JobTransaction;
 
-export type FundingStatus = "checking" | "unfunded" | "funded" | "error";
-
-export interface RefundState {
-  status: "checking" | "refundable" | "refunded" | "unavailable" | "error";
-  creator: string | undefined;
-  transaction: JobTransaction | undefined;
+interface JobDetailProps {
+  job: EvaluationJob;
+  lifecycle: JobLifecycle;
+  chainJob: OnChainJob | undefined;
+  chainError: string | undefined;
+  wallet: WalletSummary;
+  transactions: JobTransactions | undefined;
+  busyKind: "funding" | "refund" | undefined;
+  actionsBusy: boolean;
   error: string | undefined;
+  onFund: () => Promise<void>;
+  onRefund: () => Promise<void>;
 }
-
-const FAILURE_EXPLANATIONS: Record<string, string> = {
-  "Timed out":
-    "At least one assigned provider did not commit or reveal its result before the deadline.",
-  "Providers disagreed on results":
-    "Both providers revealed results, but they did not match, so no score could be verified.",
-  "Provider assignment failed":
-    "Providers could not be assigned to this job after it was funded.",
-};
 
 function SummaryItem({
   label,
@@ -67,194 +64,125 @@ function SummaryItem({
   );
 }
 
-interface FundingPanelProps {
-  job: EvaluationJob;
-  walletConnected: boolean;
-  funding: boolean;
-  fundingBusy: boolean;
-  fundingStatus: FundingStatus;
-  transaction: FundingTransaction | undefined;
-  onFund: () => Promise<void>;
-}
+const actionLabel = (busy: boolean, pending: boolean, idle: string) => {
+  if (pending) {
+    return "Waiting for confirmation…";
+  }
+  return busy ? "Approve in your wallet…" : idle;
+};
 
-interface JobDetailProps extends FundingPanelProps {
-  error: string | undefined;
-  walletAddress: string | undefined;
-  refundState: RefundState;
-  refunding: boolean;
-  refundBusy: boolean;
-  onRefund: () => Promise<void>;
-}
+const walletHint = (wallet: WalletSummary, action: string): string | null => {
+  if (wallet.wrongNetwork) {
+    return `Switch your wallet to the supported network to ${action}.`;
+  }
+  if (!wallet.ready) {
+    return `Connect your browser wallet above to ${action}.`;
+  }
+  return null;
+};
 
 function FundingPanel({
   job,
-  walletConnected,
-  funding,
-  fundingBusy,
-  fundingStatus,
-  transaction,
+  lifecycle,
+  wallet,
+  busy,
+  actionsBusy,
   onFund,
-}: FundingPanelProps) {
-  const fundedOnChain = transaction?.confirmed || fundingStatus === "funded";
-  const checkingFunding = fundingStatus === "checking";
-  const needsFundingCheck = fundingStatus === "error";
+}: Pick<
+  JobDetailProps,
+  "job" | "lifecycle" | "wallet" | "actionsBusy" | "onFund"
+> & {
+  busy: boolean;
+}) {
+  const pending = lifecycle.stage === "funding_pending";
+  const hint = walletHint(wallet, "fund this job");
   return (
     <div className="bg-muted/50 space-y-3 rounded-lg border p-3">
-      <p className="text-sm font-medium">
-        {fundedOnChain ? "Funding confirmed" : "Fund this evaluation"}
-      </p>
+      <p className="text-sm font-medium">Fund this evaluation</p>
       <p className="text-muted-foreground text-xs">
-        {fundedOnChain
-          ? "The transaction is confirmed on-chain. Waiting for the scheduler to update this job in Convex."
-          : "Send the job's funding price to the evaluation contract. Network gas is additional. Providers are assigned after funding."}
+        Your wallet sends {formatWei(job.price)} to the evaluation contract,
+        which holds it in escrow. Network gas is additional. Providers are paid
+        only if both return matching results; otherwise you can refund.
       </p>
       <Button
         className="w-full"
-        disabled={
-          (!walletConnected && !needsFundingCheck) ||
-          fundingBusy ||
-          fundedOnChain ||
-          checkingFunding
-        }
+        disabled={!wallet.ready || actionsBusy}
         onClick={onFund}
       >
         <WalletIcon data-icon="inline-start" />
-        {checkingFunding
-          ? "Checking on-chain funding…"
-          : funding
-            ? "Confirming funding…"
-            : fundedOnChain
-              ? "Waiting for job update…"
-              : needsFundingCheck
-                ? "Check funding status"
-                : transaction
-                  ? "Check funding transaction"
-                  : `Fund job · ${formatWei(job.price)}`}
+        {actionLabel(busy, pending, `Fund job · ${formatWei(job.price)}`)}
       </Button>
-      {!walletConnected && !fundedOnChain ? (
-        <p className="text-muted-foreground text-xs">
-          Connect a wallet above to fund this job.
-        </p>
-      ) : null}
+      {hint ? <p className="text-muted-foreground text-xs">{hint}</p> : null}
     </div>
   );
 }
 
-function FailurePanel({
-  failureReason,
-}: {
-  failureReason: string | undefined;
-}) {
-  const explanation = failureReason
-    ? FAILURE_EXPLANATIONS[failureReason]
-    : undefined;
-  return (
-    <div className="border-destructive/30 bg-destructive/5 space-y-1 rounded-lg border p-3">
-      <p className="text-destructive flex items-center gap-2 text-sm font-medium">
-        <TriangleAlertIcon className="size-4" aria-hidden="true" />
-        {failureReason ?? "Evaluation failed"}
-      </p>
-      <p className="text-muted-foreground text-xs">
-        {explanation ??
-          (failureReason
-            ? "The scheduler reported this reason for the failure."
-            : "No failure reason was reported for this job.")}
-      </p>
-    </div>
-  );
-}
-
-const getRefundMessage = (
-  state: RefundState,
-  job: EvaluationJob,
-  walletAddress: string | undefined
-): string => {
-  switch (state.status) {
-    case "checking": {
-      return "Checking the contract for this job's refund status…";
-    }
-    case "refunded": {
-      return `The ${formatWei(job.price)} funding price was returned to the funding wallet.`;
-    }
-    case "unavailable": {
-      return "The contract does not hold refundable funds for this job.";
-    }
-    case "error": {
-      return "The refund status could not be checked.";
-    }
-    default: {
-      break;
-    }
+const refundBlocker = (
+  chainJob: OnChainJob | undefined,
+  wallet: WalletSummary
+): string | null => {
+  const walletMessage = walletHint(wallet, "request the refund");
+  if (walletMessage) {
+    return walletMessage;
   }
-  if (!walletAddress) {
-    return "Connect the wallet that funded this job to reclaim its funding price.";
+  if (
+    chainJob &&
+    wallet.address &&
+    !isSameAddress(chainJob.creator, wallet.address)
+  ) {
+    return `Only the funding wallet ${truncateHash(chainJob.creator)} can refund this job. Switch to that account in your wallet.`;
   }
-  if (state.creator && !isSameAddress(state.creator, walletAddress)) {
-    return `Only the funding wallet ${truncateHash(state.creator)} can refund this job. Connect it to continue.`;
-  }
-  return `Return the ${formatWei(job.price)} funding price to your wallet. Network gas is additional.`;
+  return null;
 };
 
-const getRefundButtonLabel = (state: RefundState, refunding: boolean) => {
-  if (state.status === "checking") {
-    return "Checking refund status…";
-  }
-  if (state.status === "error") {
-    return "Check refund status";
-  }
-  if (state.status === "refunded") {
-    return "Refunded";
-  }
-  if (refunding) {
-    return "Confirming refund…";
-  }
-  return state.transaction ? "Check refund transaction" : "Refund job";
-};
-
-function RefundPanel({
+function OutcomePanel({
   job,
-  walletAddress,
-  refundState,
-  refunding,
-  refundBusy,
+  lifecycle,
+  chainJob,
+  wallet,
+  busy,
+  actionsBusy,
   onRefund,
 }: Pick<
   JobDetailProps,
-  | "job"
-  | "walletAddress"
-  | "refundState"
-  | "refunding"
-  | "refundBusy"
-  | "onRefund"
->) {
-  const walletIsCreator =
-    walletAddress !== undefined &&
-    (refundState.creator === undefined ||
-      isSameAddress(refundState.creator, walletAddress));
-  const canRefund = refundState.status === "refundable" && walletIsCreator;
-  const disabled = refundBusy || (refundState.status !== "error" && !canRefund);
+  "job" | "lifecycle" | "chainJob" | "wallet" | "actionsBusy" | "onRefund"
+> & { busy: boolean }) {
+  const failure = explainFailure(job.failureReason, chainJob);
+  const blocker = lifecycle.refundAvailable
+    ? refundBlocker(chainJob, wallet)
+    : null;
+  const pending = lifecycle.stage === "refund_pending";
   return (
-    <div className="bg-muted/50 space-y-3 rounded-lg border p-3">
-      <p className="flex items-center gap-2 text-sm font-medium">
-        {refundState.status === "refunded" ? (
-          <CircleCheckIcon className="size-4 text-emerald-500" />
-        ) : null}
-        {refundState.status === "refunded" ? "Refund complete" : "Refund"}
-      </p>
-      <p className="text-muted-foreground text-xs">
-        {getRefundMessage(refundState, job, walletAddress)}
-      </p>
-      {refundState.status === "unavailable" ? null : (
-        <Button
-          className="w-full"
-          variant="outline"
-          disabled={disabled}
-          onClick={onRefund}
-        >
-          <Undo2Icon data-icon="inline-start" />
-          {getRefundButtonLabel(refundState, refunding)}
-        </Button>
-      )}
+    <div className="space-y-3">
+      <div className="border-destructive/30 bg-destructive/5 space-y-1 rounded-lg border p-3">
+        <p className="text-destructive flex items-center gap-2 text-sm font-medium">
+          <TriangleAlertIcon className="size-4" aria-hidden="true" />
+          {lifecycle.stage === "expired" ? "Expired: " : null}
+          {failure.title}
+        </p>
+        <p className="text-muted-foreground text-xs">{failure.detail}</p>
+      </div>
+      {lifecycle.refundAvailable || pending ? (
+        <div className="bg-muted/50 space-y-3 rounded-lg border p-3">
+          <p className="text-sm font-medium">Refund available</p>
+          <p className="text-muted-foreground text-xs">
+            Return the {formatWei(chainJob?.price ?? job.price)} escrow to the
+            funding wallet. The contract allows exactly one refund per job.
+          </p>
+          <Button
+            className="w-full"
+            variant="outline"
+            disabled={actionsBusy || blocker !== null}
+            onClick={onRefund}
+          >
+            <Undo2Icon data-icon="inline-start" />
+            {actionLabel(busy, pending, "Refund job")}
+          </Button>
+          {blocker ? (
+            <p className="text-muted-foreground text-xs">{blocker}</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -267,16 +195,16 @@ interface TransactionRow {
 
 const getTransactionRows = (
   job: EvaluationJob,
-  fundingTransaction: JobTransaction | undefined,
-  refundTransaction: JobTransaction | undefined
+  transactions: JobTransactions | undefined
 ): TransactionRow[] => {
   const rows: TransactionRow[] = [];
-  const fundingHash = job.jobFunded_tx ?? fundingTransaction?.hash;
+  const funding = transactions?.funding;
+  const fundingHash = job.jobFunded_tx ?? funding?.hash;
   if (fundingHash) {
     rows.push({
       label: "Funded",
       hash: fundingHash,
-      pending: !job.jobFunded_tx && !fundingTransaction?.confirmed,
+      pending: !job.jobFunded_tx && !funding?.confirmed,
     });
   }
   if (job.jobComplete_tx) {
@@ -285,11 +213,11 @@ const getTransactionRows = (
   if (job.jobFailed_tx) {
     rows.push({ label: "Failed", hash: job.jobFailed_tx });
   }
-  if (refundTransaction) {
+  if (transactions?.refund) {
     rows.push({
-      label: "Refunded",
-      hash: refundTransaction.hash,
-      pending: !refundTransaction.confirmed,
+      label: "Refund",
+      hash: transactions.refund.hash,
+      pending: !transactions.refund.confirmed,
     });
   }
   return rows;
@@ -326,27 +254,41 @@ function TransactionsList({ rows }: { rows: TransactionRow[] }) {
   );
 }
 
+const showsProviders = (
+  lifecycle: JobLifecycle,
+  chainJob: OnChainJob | undefined
+): chainJob is OnChainJob =>
+  lifecycle.stage !== "accepted" &&
+  chainJob?.providers.some((provider) => provider.assigned) === true;
+
 export function JobDetail({
   job,
-  transaction,
+  lifecycle,
+  chainJob,
+  chainError,
+  wallet,
+  transactions,
+  busyKind,
+  actionsBusy,
   error,
-  walletAddress,
-  refundState,
-  refunding,
-  refundBusy,
+  onFund,
   onRefund,
-  ...fundingProps
 }: JobDetailProps) {
-  const transactionRows = getTransactionRows(
-    job,
-    transaction,
-    refundState.transaction
-  );
+  const canFund =
+    lifecycle.stage === "awaiting_funding" ||
+    lifecycle.stage === "funding_pending";
+  // Keep the failure explanation visible after the refund confirms
+  const isFailure = [
+    "failed",
+    "expired",
+    "refund_pending",
+    "refunded",
+  ].includes(lifecycle.stage);
   return (
     <Card className="min-w-0 gap-4 rounded-xl">
       <CardHeader className="gap-2 border-b">
         <div className="flex flex-wrap items-center gap-2">
-          <JobStatusBadge status={job.status} />
+          <JobStageBadge stage={lifecycle.stage} />
           <span className="text-muted-foreground flex min-w-0 items-center font-mono">
             <span className="min-w-0 break-all">{job._id}</span>
             <CopyButton value={job._id} label="Job ID" />
@@ -376,41 +318,62 @@ export function JobDetail({
           <SummaryItem label="Created">
             {formatDateTime(job._creationTime)}
           </SummaryItem>
-          <SummaryItem label="Status updated">
-            {formatDateTime(job.statusTime)}
+          <SummaryItem label="Scheduler status">
+            <span className="capitalize">{job.status}</span>
+            <span className="text-muted-foreground block text-xs font-normal">
+              Updated {formatDateTime(job.statusTime)}
+            </span>
           </SummaryItem>
         </dl>
-        {job.status === "created" ? (
-          <FundingPanel job={job} transaction={transaction} {...fundingProps} />
+        <JobTimeline lifecycle={lifecycle} chainJob={chainJob} />
+        {chainError ? (
+          <p
+            role="alert"
+            className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs"
+          >
+            Could not read this job from the contract: {chainError}
+          </p>
         ) : null}
-        {job.status === "failed" ? (
-          <>
-            <FailurePanel failureReason={job.failureReason} />
-            <RefundPanel
-              job={job}
-              walletAddress={walletAddress}
-              refundState={refundState}
-              refunding={refunding}
-              refundBusy={refundBusy}
-              onRefund={onRefund}
+        {canFund ? (
+          <FundingPanel
+            job={job}
+            lifecycle={lifecycle}
+            wallet={wallet}
+            busy={busyKind === "funding"}
+            actionsBusy={actionsBusy}
+            onFund={onFund}
+          />
+        ) : null}
+        {isFailure ? (
+          <OutcomePanel
+            job={job}
+            lifecycle={lifecycle}
+            chainJob={chainJob}
+            wallet={wallet}
+            busy={busyKind === "refund"}
+            actionsBusy={actionsBusy}
+            onRefund={onRefund}
+          />
+        ) : null}
+        {lifecycle.stage === "accepted" ? (
+          <ResultReceipt job={job} chainJob={chainJob} />
+        ) : null}
+        {showsProviders(lifecycle, chainJob) ? (
+          <div className="space-y-2 text-xs">
+            <p className="font-medium">Assigned providers</p>
+            <ProviderStatusList
+              providers={chainJob.providers}
+              showClaims={false}
             />
-          </>
+          </div>
         ) : null}
-        <TransactionsList rows={transactionRows} />
+        <TransactionsList rows={getTransactionRows(job, transactions)} />
         {error ? (
           <p
             role="alert"
             className="text-destructive rounded-lg border p-3 text-xs"
           >
             {error}
-          </p>
-        ) : null}
-        {job.status === "failed" && refundState.error ? (
-          <p
-            role="alert"
-            className="text-destructive rounded-lg border p-3 text-xs"
-          >
-            {refundState.error}
           </p>
         ) : null}
         <dl className="space-y-3 border-t pt-4 text-xs">
@@ -448,17 +411,6 @@ export function JobDetail({
             </>
           ) : null}
         </dl>
-        {job.status === "funded" ? (
-          <p className="text-muted-foreground text-xs">
-            Funding received. This view updates automatically as the scheduler
-            reports evaluation status.
-          </p>
-        ) : null}
-        {job.status === "succeeded" && job.score === undefined ? (
-          <p className="text-muted-foreground text-xs">
-            Evaluation completed. No score has been reported yet.
-          </p>
-        ) : null}
       </CardContent>
     </Card>
   );
