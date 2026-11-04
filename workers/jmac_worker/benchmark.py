@@ -80,6 +80,8 @@ def load_benchmark(path: Path) -> Benchmark:
 
 def parse_benchmark(content: bytes) -> Benchmark:
     """Validate downloaded bytes without reserializing the benchmark."""
+    if len(content) > 16 * 1024 * 1024:
+        raise ValueError("Benchmark exceeds byte limit")
     document = _require_object(
         json.loads(content.decode("utf-8"), parse_constant=_reject_json_constant),
         "benchmark",
@@ -93,4 +95,13 @@ def parse_benchmark(content: bytes) -> Benchmark:
         _parse_item(item, index)
         for index, item in enumerate(_require_array(document.get("items"), "items"))
     )
+    if len(items) > 100 or len({item.item_id for item in items}) != len(items):
+        raise ValueError("Benchmark item count or duplicate IDs")
+    if any(
+        len(item.prompt) > 8192
+        or len(item.choices) > 10
+        or any(len(choice) > 2048 for choice in item.choices)
+        for item in items
+    ):
+        raise ValueError("Benchmark text exceeds supported limits")
     return Benchmark(name, description, version, sha256(content).hexdigest(), items)
