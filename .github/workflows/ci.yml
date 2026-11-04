@@ -16,6 +16,15 @@ jobs:
       - run: bun run lint
       - run: bun run format:check
       - run: bun run check-types
+      - run: bun run test
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      # forge-std is vendored under contracts/lib, so no submodule checkout
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: forge test
+        working-directory: contracts
   build:
     runs-on: ubuntu-latest
     # Configure the repository variable after supplying the two Actions secrets.
