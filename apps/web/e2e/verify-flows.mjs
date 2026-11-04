@@ -214,9 +214,10 @@ const phases = {
       throw new Error("Refund offered before the deadline");
     }
 
-    step(`advance Anvil time ${EXPIRY_SECONDS}s past the commit deadline`);
+    // No evm_mine: an idle chain whose latest block predates the deadline
+    // must still allow the refund (simulated against the pending block)
+    step(`advance Anvil time ${EXPIRY_SECONDS}s without mining a block`);
     await anvil("evm_increaseTime", [EXPIRY_SECONDS]);
-    await anvil("evm_mine");
     await detail(page)
       .getByText(/Expired/u)
       .first()

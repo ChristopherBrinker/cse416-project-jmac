@@ -4,6 +4,7 @@ import {
   BaseError,
   ChainMismatchError,
   ContractFunctionRevertedError,
+  TransactionReceiptNotFoundError,
   UserRejectedRequestError,
   createPublicClient,
   defineChain,
@@ -41,7 +42,7 @@ const ADDRESS_PATTERN = /^0x[\da-fA-F]{40}$/u;
 const EMPTY_COMMIT =
   "0x0000000000000000000000000000000000000000000000000000000000000000";
 const ON_CHAIN_STATUSES = ["open", "complete", "failed", "refunded"] as const;
-const MS_PER_SECOND = 1000;
+const RECEIPT_TIMEOUT_MS = 120_000;
 
 export type OnChainJobStatus = (typeof ON_CHAIN_STATUSES)[number];
 
@@ -66,7 +67,7 @@ export interface OnChainJob {
   /** Unix seconds; commits close here and reveals close REVEAL_WINDOW later. */
   commitDeadline: number;
   revealDeadline: number;
-  /** Estimated timestamp of the next block, used for deadline checks. */
+  /** Timestamp of the pending (next) block, used for deadline checks. */
   chainTime: number;
 }
 
@@ -178,7 +179,9 @@ export const getOnChainJob = async (jobId: string): Promise<OnChainJob> => {
       functionName: "jobs",
       args: [jobId],
     }),
-    publicClient.getBlock({ blockTag: "latest" }),
+    // Anvil mines on demand, so "latest" can be stale. The pending block is
+    // stamped like the next real block, which is where a refund would run.
+    publicClient.getBlock({ blockTag: "pending" }),
   ]);
   if (!Array.isArray(job) || job.length < 8) {
     throw new TypeError("Could not read this job from the contract.");
@@ -203,12 +206,7 @@ export const getOnChainJob = async (jobId: string): Promise<OnChainJob> => {
     providers: [parseProvider(providerA), parseProvider(providerB)],
     commitDeadline,
     revealDeadline: commitDeadline + revealWindow,
-    // Anvil only mines on demand, so the latest block can be stale; the next
-    // block (where a refund would execute) is stamped no earlier than now.
-    chainTime: Math.max(
-      Number(block.timestamp),
-      Math.floor(Date.now() / MS_PER_SECOND)
-    ),
+    chainTime: Number(block.timestamp),
   };
 };
 
@@ -243,6 +241,8 @@ export const writeJobTransaction = async (
     functionName,
     args: [jobId],
     value,
+    // Simulate as the next block so deadline checks match the real tx
+    blockTag: "pending",
   });
   return wallet.walletClient.writeContract(request);
 };
@@ -252,8 +252,36 @@ export const waitForTransactionSuccess = async (
   hash: Hash
 ): Promise<boolean> => {
   const { publicClient } = await getBlockchainReader();
-  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  const receipt = await publicClient.waitForTransactionReceipt({
+    hash,
+    timeout: RECEIPT_TIMEOUT_MS,
+  });
   return receipt.status === "success";
+};
+
+export type TransactionOutcome = "success" | "reverted" | "unknown";
+
+/**
+ * Looks up a previously submitted transaction without waiting. "unknown"
+ * means it is still pending or the chain has never seen it (for example
+ * after an Anvil restart).
+ */
+export const getTransactionOutcome = async (
+  hash: Hash
+): Promise<TransactionOutcome> => {
+  const { publicClient } = await getBlockchainReader();
+  try {
+    const receipt = await publicClient.getTransactionReceipt({ hash });
+    return receipt.status === "success" ? "success" : "reverted";
+  } catch (error) {
+    if (
+      error instanceof BaseError &&
+      error.walk((cause) => cause instanceof TransactionReceiptNotFoundError)
+    ) {
+      return "unknown";
+    }
+    throw error;
+  }
 };
 
 /** Turns wallet and contract errors into a message a user can act on. */
