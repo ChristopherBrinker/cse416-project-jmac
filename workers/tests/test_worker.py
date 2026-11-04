@@ -41,6 +41,14 @@ class BenchmarkTests(unittest.TestCase):
             benchmark.content_hash, sha256(BENCHMARK_PATH.read_bytes()).hexdigest()
         )
 
+    def test_output_key_is_private_and_distinct_from_content_hash(self) -> None:
+        content = BENCHMARK_PATH.read_bytes()
+        benchmark = load_benchmark(BENCHMARK_PATH)
+        self.assertEqual(
+            benchmark.output_key, sha256(b"jmac-output-key-v1:" + content).hexdigest()
+        )
+        self.assertNotEqual(benchmark.output_key, benchmark.content_hash)
+
     def test_hash_changes_with_whitespace(self) -> None:
         self.write_document(self.document)
         original = load_benchmark(self.path)
@@ -164,11 +172,12 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(
             result,
             {
-                "schema_version": "2.0.0",
+                "schema_version": "3.0.0",
                 "benchmark": {
                     "name": "Worker scoring example",
                     "version": "1.0.0",
                     "content_hash": self.benchmark.content_hash,
+                    "output_key": self.benchmark.output_key,
                 },
                 "item_ids": ["arithmetic", "capital", "comparison"],
                 "predictions": [1, 0, 1],

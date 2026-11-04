@@ -4,7 +4,8 @@ from dataclasses import dataclass
 
 from .benchmark import Benchmark
 
-RESULT_SCHEMA_VERSION = "2.0.0"
+RESULT_SCHEMA_VERSION = "3.0.0"
+HEX_DIGEST_LENGTH = 64
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +23,8 @@ class EvaluationResult:
                 "name": self.benchmark.name,
                 "version": self.benchmark.version,
                 "content_hash": self.benchmark.content_hash,
+                # private: keys the on-chain output digest, never published
+                "output_key": self.benchmark.output_key,
             },
             "item_ids": [item.item_id for item in self.benchmark.items],
             "predictions": list(self.predictions),
@@ -97,9 +100,10 @@ def is_valid_saved_evaluation(document: object) -> bool:
         return False
     if not isinstance(benchmark.get("version"), str):
         return False
-    content_hash = benchmark.get("content_hash")
-    if not isinstance(content_hash, str) or len(content_hash) != 64:
-        return False
-    if any(character not in "0123456789abcdef" for character in content_hash):
-        return False
+    for field in ("content_hash", "output_key"):
+        value = benchmark.get(field)
+        if not isinstance(value, str) or len(value) != HEX_DIGEST_LENGTH:
+            return False
+        if any(character not in "0123456789abcdef" for character in value):
+            return False
     return isinstance(document.get("inference"), dict)
