@@ -56,3 +56,13 @@ The registry/escrow owner has supplied the initial contract and ABIs. The contra
 ## Message for the team
 
 > The worker and Docker package are ready for local evaluation, and provider readiness/heartbeats are implemented. Main now has assignments, authorized benchmark downloads, and contract commitments. The opt-in worker now subscribes, downloads, evaluates, and saves results with restart deduplication. It still needs the expected benchmark hash from the backend and backend event synchronization; model mapping currently uses an explicit deployment configuration. The score output already uses boolean arrays matching `bool[]`. The worker now supports opt-in commitments using keccak256 of ABI-encoded bool[] scores, with durable transaction journals. Reveal/comparison, refunds, payouts, and deadlines now exist in the contract. Worker settlement handles reveal and payment events; backend status synchronization and creator-initiated refunds remain separate. Live provider authentication is still unverified.
+
+## M4 handoff update
+
+The worker now requires the immutable `specification` object described in [README](README.md#m4-assignment-integrity-interface-proposal-pending-backend-adoption). This is a proposed interface, not an agreement already obtained from teammates.
+
+- Chris: freeze and authorize every field, publish it on subscriptions, mirror byte, item and text limits, confirm backend state for assignment/removal/settlement. Match Unix-second deadlines to the contract, and reject unknown settings.
+- Anthony: current acceptance compares correctness vectors. It does not establish identical predictions (two different wrong choices both score false). Confirm whether this guarantee is intended. No salt or contract digest change was made. Verify funded two-wallet commits/reveals/claims and deadline/refund paths.
+- Miguel: confirm receipt display using the same job, wallets and transaction hashes.
+
+Live evidence must record public chain ID/contract, job/provider IDs, assigned wallet addresses, block numbers, tx hashes and receipt status for both commits, both reveals and both claims, plus acceptance and backend/UI state. Never export private journals, signed payloads, keys, secrets, benchmark questions or answer keys. Capture restart checkpoints after persistence, broadcast-before-confirmation, before reveal and before claim; compare logical events and balances to prove no duplicate effects. Also exercise removed assignments, inference failure, unsupported settings, disappearance and refund eligibility. No live evidence is supplied yet.
