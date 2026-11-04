@@ -220,6 +220,50 @@ class SettlementTests(unittest.TestCase):
             {"args": {"jobId": job_id}}
         ]
 
+    def save_historical_specification(self, **overrides):
+        from jmac_worker.specification import supported_settings
+
+        document = json.loads(self.path.read_bytes())
+        spec = {
+            **supported_settings(),
+            "worker_sha256": "0" * 64,
+            "benchmark_id": "benchmark",
+            "benchmark_version": "1",
+            "benchmark_sha256": "a" * 64,
+            "item_count": 3,
+            "commit_deadline": 1000,
+            "reveal_deadline": 1900,
+            "chain_id": 31337,
+            "contract_address": CONTRACT,
+            **overrides,
+        }
+        document["assignment"]["specification"] = json.dumps(spec)
+        self.path.write_text(json.dumps(document))
+
+    def test_historical_artifact_can_reveal_after_upgrade(self):
+        self.save_historical_specification()
+        self.emit("CommitComplete")
+        self.client.settle(self.path)
+        self.functions.revealResult.assert_called_once_with("job", SCORES)
+        self.assertTrue(self.path.with_suffix(".reveal.json").exists())
+
+    def test_historical_artifact_can_claim_after_upgrade(self):
+        self.save_historical_specification()
+        self.job[6] = 1
+        self.provider[5] = True
+        self.emit("JobComplete")
+        self.client.settle(self.path)
+        self.functions.claimPayment.assert_called_once_with("job")
+        self.assertTrue(self.path.with_suffix(".claim.json").exists())
+
+    def test_historical_specification_still_enforces_chain_and_contract(self):
+        for overrides in ({"chain_id": 1}, {"contract_address": OTHER}):
+            with self.subTest(overrides=overrides):
+                self.save_historical_specification(**overrides)
+                with self.assertRaisesRegex(ValueError, "chain identity mismatch"):
+                    self.client.settle(self.path)
+        self.eth.send_raw_transaction.assert_not_called()
+
     def test_both_commits_without_event_do_not_reveal(self):
         self.assertFalse(self.client.advance(self.path))
         self.functions.revealResult.assert_not_called()
