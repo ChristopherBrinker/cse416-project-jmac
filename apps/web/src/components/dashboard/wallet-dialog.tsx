@@ -21,6 +21,10 @@ import type { BlockchainWalletState } from "./use-blockchain-wallet";
 
 const GENERIC_INJECTED_ID = "injected";
 
+const hasInjectedProvider = (): boolean =>
+  typeof window !== "undefined" &&
+  (window as Window & { ethereum?: unknown }).ethereum !== undefined;
+
 function ConnectorList({ onConnected }: { onConnected: () => void }) {
   // Typed as a list because EIP-6963 discovery adds wallets at runtime
   const allConnectors: readonly Connector[] = useConnectors();
@@ -28,7 +32,13 @@ function ConnectorList({ onConnected }: { onConnected: () => void }) {
   const discovered = allConnectors.filter(
     (connector) => connector.id !== GENERIC_INJECTED_ID
   );
-  const connectors = discovered.length > 0 ? discovered : allConnectors;
+  // The generic connector is always configured, so only offer it when a
+  // legacy wallet actually injected window.ethereum; otherwise fall through
+  // to the install instructions.
+  const connectors =
+    discovered.length > 0 || !hasInjectedProvider()
+      ? discovered
+      : allConnectors;
   const { mutateAsync: connect } = useConnect();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
