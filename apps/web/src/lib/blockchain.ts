@@ -1,47 +1,84 @@
 "use client";
 
-import { createPublicClient, createWalletClient, http } from "viem";
+import {
+  BaseError,
+  ChainMismatchError,
+  ContractFunctionRevertedError,
+  UserRejectedRequestError,
+  createPublicClient,
+  defineChain,
+  http,
+} from "viem";
 import type {
   Abi,
   Account,
   Address,
   Chain,
   Hash,
+  Hex,
   PublicClient,
   Transport,
   WalletClient,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
 
 export const contractAddress = process.env
   .NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
-export const evaluationChain = foundry;
+const rpcUrl = process.env.NEXT_PUBLIC_NET_URL ?? "http://127.0.0.1:8545";
+
+/**
+ * The only supported network: a local Anvil chain (chain ID 31337) reached
+ * through the configured RPC URL. Wallets use this definition when asked to
+ * add or switch to the network.
+ */
+export const evaluationChain = defineChain({
+  ...foundry,
+  name: "JMAC Local (Anvil)",
+  rpcUrls: { default: { http: [rpcUrl] } },
+});
 
 const ADDRESS_PATTERN = /^0x[\da-fA-F]{40}$/u;
-// Indexes into the `jobs` getter tuple, matching the Job struct in Evaluation.sol
-const JOB_CREATOR_INDEX = 0;
-const JOB_FLAG_INDEX = 5;
-const JOB_STATUS_INDEX = 6;
+const EMPTY_COMMIT =
+  "0x0000000000000000000000000000000000000000000000000000000000000000";
 const ON_CHAIN_STATUSES = ["open", "complete", "failed", "refunded"] as const;
+const MS_PER_SECOND = 1000;
 
 export type OnChainJobStatus = (typeof ON_CHAIN_STATUSES)[number];
+
+export interface OnChainProvider {
+  address: Address;
+  providerId: string;
+  assigned: boolean;
+  committed: boolean;
+  commit: Hex | undefined;
+  revealed: boolean;
+  claimed: boolean;
+  /** Per-item correctness revealed by the provider (public on-chain). */
+  result: readonly boolean[];
+}
+
 export interface OnChainJob {
   funded: boolean;
   creator: Address;
+  price: bigint;
   status: OnChainJobStatus;
+  providers: readonly [OnChainProvider, OnChainProvider];
+  /** Unix seconds; commits close here and reveals close REVEAL_WINDOW later. */
+  commitDeadline: number;
+  revealDeadline: number;
+  /** Estimated timestamp of the next block, used for deadline checks. */
+  chainTime: number;
 }
 
-export type WalletSource = "privateKey" | "browser";
 export interface BlockchainWallet {
   address: Address;
-  source: WalletSource;
   walletClient: WalletClient<Transport, Chain, Account>;
 }
 
 interface BlockchainReader {
   publicClient: PublicClient;
   abi: Abi;
+  revealWindow: number;
 }
 
 let readerPromise: Promise<BlockchainReader> | undefined;
@@ -52,12 +89,12 @@ const loadBlockchainReader = async (): Promise<BlockchainReader> => {
     !ADDRESS_PATTERN.test(contractAddress ?? "")
   ) {
     throw new Error(
-      "Wallet funding is not configured. Set the frontend RPC URL and contract address."
+      "The evaluation contract is not configured. Set NEXT_PUBLIC_NET_URL and NEXT_PUBLIC_CONTRACT_ADDRESS."
     );
   }
   const publicClient = createPublicClient({
     chain: evaluationChain,
-    transport: http(process.env.NEXT_PUBLIC_NET_URL),
+    transport: http(rpcUrl),
   });
   const abiRes = await fetch("/abi.json");
   if (!abiRes.ok) {
@@ -70,7 +107,15 @@ const loadBlockchainReader = async (): Promise<BlockchainReader> => {
   if (!Array.isArray(abi)) {
     throw new TypeError("The evaluation contract ABI is invalid.");
   }
-  return { publicClient, abi };
+  const revealWindow = await publicClient.readContract({
+    address: contractAddress,
+    abi,
+    functionName: "REVEAL_WINDOW",
+  });
+  if (typeof revealWindow !== "bigint") {
+    throw new TypeError("Could not read the contract's reveal window.");
+  }
+  return { publicClient, abi, revealWindow: Number(revealWindow) };
 };
 
 const getBlockchainReader = async (): Promise<BlockchainReader> => {
@@ -84,39 +129,86 @@ const getBlockchainReader = async (): Promise<BlockchainReader> => {
   }
 };
 
-const isOnChainStatus = (value: unknown): value is number =>
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const parseProvider = (value: unknown): OnChainProvider => {
+  if (
+    !isRecord(value) ||
+    typeof value.addr !== "string" ||
+    typeof value.id !== "string" ||
+    typeof value.commit !== "string" ||
+    typeof value.flag !== "boolean" ||
+    typeof value.revealed !== "boolean" ||
+    typeof value.claimed !== "boolean" ||
+    !Array.isArray(value.result)
+  ) {
+    throw new TypeError(
+      "Could not read this job's providers from the contract."
+    );
+  }
+  const committed = value.commit !== EMPTY_COMMIT;
+  return {
+    address: value.addr as Address,
+    providerId: value.id,
+    assigned: value.flag,
+    committed,
+    commit: committed ? (value.commit as Hex) : undefined,
+    revealed: value.revealed,
+    claimed: value.claimed,
+    result: value.result.filter(
+      (item): item is boolean => item === true || item === false
+    ),
+  };
+};
+
+const isStatusIndex = (value: unknown): value is number =>
   typeof value === "number" &&
   Number.isInteger(value) &&
   value >= 0 &&
   value < ON_CHAIN_STATUSES.length;
 
+/** Reads a job's escrow, assignment, commit/reveal, and claim state. */
 export const getOnChainJob = async (jobId: string): Promise<OnChainJob> => {
-  const { publicClient, abi } = await getBlockchainReader();
-  const job = await publicClient.readContract({
-    address: contractAddress,
-    abi,
-    functionName: "jobs",
-    args: [jobId],
-  });
-
-  if (!Array.isArray(job)) {
+  const { publicClient, abi, revealWindow } = await getBlockchainReader();
+  const [job, block] = await Promise.all([
+    publicClient.readContract({
+      address: contractAddress,
+      abi,
+      functionName: "jobs",
+      args: [jobId],
+    }),
+    publicClient.getBlock({ blockTag: "latest" }),
+  ]);
+  if (!Array.isArray(job) || job.length < 8) {
     throw new TypeError("Could not read this job from the contract.");
   }
-  const creator: unknown = job.at(JOB_CREATOR_INDEX);
-  const funded: unknown = job.at(JOB_FLAG_INDEX);
-  const status: unknown = job.at(JOB_STATUS_INDEX);
+  const [creator, , price, providerA, providerB, funded, status, deadline] =
+    job as unknown[];
   if (
-    typeof funded !== "boolean" ||
     typeof creator !== "string" ||
-    !ADDRESS_PATTERN.test(creator) ||
-    !isOnChainStatus(status)
+    typeof price !== "bigint" ||
+    typeof funded !== "boolean" ||
+    typeof deadline !== "bigint" ||
+    !isStatusIndex(status)
   ) {
     throw new TypeError("Could not read this job from the contract.");
   }
+  const commitDeadline = Number(deadline);
   return {
     funded,
     creator: creator as Address,
+    price,
     status: ON_CHAIN_STATUSES[status],
+    providers: [parseProvider(providerA), parseProvider(providerB)],
+    commitDeadline,
+    revealDeadline: commitDeadline + revealWindow,
+    // Anvil only mines on demand, so the latest block can be stale; the next
+    // block (where a refund would execute) is stamped no earlier than now.
+    chainTime: Math.max(
+      Number(block.timestamp),
+      Math.floor(Date.now() / MS_PER_SECOND)
+    ),
   };
 };
 
@@ -125,25 +217,10 @@ export const getJobFundingStatus = async (jobId: string): Promise<boolean> => {
   return funded;
 };
 
-export const createPrivateKeyWallet = async (
-  key: `0x${string}`
-): Promise<BlockchainWallet> => {
-  // Fail fast when the frontend is not configured for the contract
-  await getBlockchainReader();
-  const account = privateKeyToAccount(key);
-  const walletClient = createWalletClient({
-    account,
-    chain: evaluationChain,
-    transport: http(process.env.NEXT_PUBLIC_NET_URL),
-  });
-  return { address: account.address, source: "privateKey", walletClient };
-};
-
 export const createBrowserWallet = (
   walletClient: WalletClient<Transport, Chain, Account>
 ): BlockchainWallet => ({
   address: walletClient.account.address,
-  source: "browser",
   walletClient,
 });
 
@@ -152,7 +229,11 @@ export const isSameAddress = (a: string, b: string): boolean =>
 
 type JobContractFunction = "fundJob" | "refund";
 
-/** Simulates then submits a job-scoped contract call, returning its hash. */
+/**
+ * Simulates a job-scoped contract call (so reverts such as "Job not
+ * refundable" surface before the wallet prompt), then asks the browser wallet
+ * to sign and submit it. Returns the transaction hash.
+ */
 export const writeJobTransaction = async (
   wallet: BlockchainWallet,
   functionName: JobContractFunction,
@@ -178,4 +259,29 @@ export const waitForTransactionSuccess = async (
   const { publicClient } = await getBlockchainReader();
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   return receipt.status === "success";
+};
+
+/** Turns wallet and contract errors into a message a user can act on. */
+export const describeWalletError = (error: unknown): string => {
+  if (error instanceof BaseError) {
+    if (error.walk((cause) => cause instanceof UserRejectedRequestError)) {
+      return "You rejected the request in your wallet. Nothing was signed or sent.";
+    }
+    if (error.walk((cause) => cause instanceof ChainMismatchError)) {
+      return `Your wallet is on a different network. Switch to ${evaluationChain.name} (chain ${evaluationChain.id}) and try again.`;
+    }
+    const revert = error.walk(
+      (cause) => cause instanceof ContractFunctionRevertedError
+    );
+    if (revert instanceof ContractFunctionRevertedError && revert.reason) {
+      return `The contract rejected this transaction: ${revert.reason}.`;
+    }
+    return error.shortMessage;
+  }
+  if (isRecord(error) && error.code === 4001) {
+    return "You rejected the request in your wallet. Nothing was signed or sent.";
+  }
+  return error instanceof Error
+    ? error.message
+    : "Something went wrong. Please try again.";
 };

@@ -2,6 +2,14 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { query, mutation } from "./_generated/server";
+import {
+  buildChallengeMessage,
+  checkChallengeUsable,
+  createNonce,
+  normalizeWalletAddress,
+  verifyChallengeSignature,
+  WALLET_CHALLENGE_TTL_MS,
+} from "./lib/wallet";
 
 function generateSecret() {
   const chars =
@@ -16,23 +24,95 @@ function generateSecret() {
   return result;
 }
 
-export const register = mutation({
+export const createWalletChallenge = mutation({
   args: { walletAddress: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity === null) {
+      return { success: false as const, error: "Authentication required" };
+    }
+    const walletAddress = normalizeWalletAddress(args.walletAddress);
+    if (!walletAddress) {
+      return { success: false as const, error: "Invalid wallet address" };
+    }
+
+    // Only the newest challenge per account stays usable
+    const previous = await ctx.db
+      .query("wallet_challenges")
+      .withIndex("by_userId_and_used", (q) =>
+        q.eq("userId", identity.subject).eq("used", false)
+      )
+      .take(20);
+    await Promise.all(
+      previous.map((challenge) =>
+        ctx.db.delete("wallet_challenges", challenge._id)
+      )
+    );
+
+    const issuedAt = Date.now();
+    const expiresAt = issuedAt + WALLET_CHALLENGE_TTL_MS;
+    const nonce = createNonce();
+    const message = buildChallengeMessage({
+      userId: identity.subject,
+      walletAddress,
+      nonce,
+      issuedAt,
+      expiresAt,
+    });
+    const challengeId = await ctx.db.insert("wallet_challenges", {
+      userId: identity.subject,
+      walletAddress,
+      nonce,
+      message,
+      expiresAt,
+      used: false,
+    });
+    return { success: true as const, challengeId, message, expiresAt };
+  },
+});
+
+export const register = mutation({
+  args: {
+    challengeId: v.id("wallet_challenges"),
+    signature: v.string(),
+  },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (identity === null) {
       return { success: false, error: "Authentication required" };
     }
 
-    const addr = args.walletAddress;
-    if (addr.length !== 42 || addr.slice(0, 2) !== "0x") {
-      return { success: false, error: "Invalid wallet address" };
+    const challenge = await ctx.db.get("wallet_challenges", args.challengeId);
+    if (!challenge) {
+      return { success: false, error: "Wallet challenge not found" };
     }
-    const addrChar = "0123456789ABCDEFabcdef";
-    for (let i = 2; i < addr.length; i++) {
-      if (!addrChar.includes(addr[i])) {
-        return { success: false, error: "Invalid wallet address" };
-      }
+    const usable = checkChallengeUsable(
+      challenge,
+      identity.subject,
+      Date.now()
+    );
+    if (!usable.ok) {
+      return { success: false, error: usable.error };
+    }
+    // Consume the challenge before checking the signature so a failed or
+    // replayed attempt can never reuse it.
+    await ctx.db.patch("wallet_challenges", challenge._id, { used: true });
+    const verified = await verifyChallengeSignature(challenge, args.signature);
+    if (!verified.ok) {
+      return { success: false, error: verified.error };
+    }
+
+    const walletInUse = await ctx.db
+      .query("providers")
+      .withIndex("by_walletAddress", (q) =>
+        q.eq("walletAddress", challenge.walletAddress)
+      )
+      .first();
+    if (walletInUse) {
+      return {
+        success: false,
+        error: "This wallet is already registered to a provider",
+      };
     }
 
     const existing = await ctx.db
@@ -49,16 +129,17 @@ export const register = mutation({
     }
 
     const secret = generateSecret();
-
+    const now = Date.now();
     const providerId = await ctx.db.insert("providers", {
       userId: identity.subject,
       secret,
-      walletAddress: args.walletAddress,
+      walletAddress: challenge.walletAddress,
+      walletVerifiedAt: now,
       approved: false,
       maxJobs: 0n,
       currentJobs: 0n,
       status: "offline",
-      lastHeartbeat: Date.now(),
+      lastHeartbeat: now,
     });
     return { success: true, providerId, secret };
   },

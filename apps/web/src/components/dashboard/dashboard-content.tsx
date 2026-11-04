@@ -261,7 +261,7 @@ function LiveDashboard() {
           </div>
         </TabsContent>
         <TabsContent value="providers">
-          <ProvidersPanel models={models ?? []} />
+          <ProvidersPanel models={models ?? []} walletState={walletState} />
         </TabsContent>
       </Tabs>
     </main>

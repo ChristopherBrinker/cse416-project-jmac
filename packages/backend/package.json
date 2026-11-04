@@ -14,16 +14,20 @@
     "dev:setup": "convex dev --configure --until-success",
     "lint": "oxlint .",
     "check-types": "tsc --noEmit -p convex/tsconfig.json",
-    "codegen": "convex codegen"
+    "codegen": "convex codegen",
+    "test": "bun test tests"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.12.5",
     "better-auth": "1.6.15",
     "convex": "catalog:",
+    "ox": "0.14.56",
+    "viem": "^2.57.7",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@cse416-project-jmac/config": "workspace:*",
+    "@types/bun": "^1.4.4",
     "@types/node": "catalog:",
     "typescript": "catalog:"
   }

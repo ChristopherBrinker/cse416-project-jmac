@@ -8,6 +8,7 @@ This contains information useful for interacting with the convex backend
   - [benchmark](#benchmark)
   - [model](#model)
   - [job](#job)
+  - [admin](#admin) (internal)
   - [provider](#provider)
 - [HTTP Endpoints](#http-endpoints)
 - [Benchmark File Format](#benchmark-file-format)
@@ -68,19 +69,39 @@ This contains information useful for interacting with the convex backend
   - Returns all active job_assignment records (see `convex/schema`) for this provider, assuming authentication with the provided secret
   - Provider should listen to this to receive jobs
 
+### admin
+
+Internal functions; they cannot be called from a browser. Run them with deployment credentials from `packages/backend`:
+
+- `admin:addModel` - `bunx convex run admin:addModel '{"name": "SmolLM2-135M-Instruct"}'` adds a model record
+- `admin:approveProvider` - `bunx convex run admin:approveProvider '{"providerId": "<id>"}'` approves a provider; refuses providers whose wallet was never verified with a signed challenge
+
 ### provider
+
+- `createWalletChallenge` : mutation
+  - `args`:
+    - `walletAddress : string`
+  - Called by an authenticated user from the frontend with the address of the **connected** browser wallet. Issues a single-use challenge that binds the user's account, the wallet, chain ID 31337, a random 128-bit nonce, and an expiry five minutes out. Creating a challenge deletes the user's older unused challenges
+  - Returns an object with the following properties:
+    - `success : boolean`
+    - `error : string | undefined`
+    - `challengeId : Id<"wallet_challenges"> | undefined`
+    - `message : string | undefined` - the exact text the wallet must sign (EIP-191 `personal_sign`)
+    - `expiresAt : number | undefined` - Unix milliseconds
 
 - `register` : mutation
   - `args`:
-    - `walletAddress : string`
-  - Creates a provider record with the provided wallet address. Note that this provider must be manually approved by setting `approved` to `true` in the dashboard
-    - Backend verifies wallet address format but not ownership (this should be fine, as using someone else's address would bar a provider from sending results for jobs, with no benefit)
+    - `challengeId : Id<"wallet_challenges">`
+    - `signature : string` - the wallet's `personal_sign` signature over the challenge `message`
+  - Creates a provider record for the challenged wallet only after verifying ownership. The challenge must belong to the caller, be unused, and be unexpired; it is marked used **before** the signature is checked, so a failed or replayed attempt can never reuse it. The signature must recover to the challenged address. A wallet can back only one provider. Typing an address is no longer accepted
+  - The new provider stores `walletVerifiedAt` and must still be approved by an administrator (`admin:approveProvider`)
   - Returns an object with the following properties:
     - `success : boolean` - whether the provider was successfully registered
     - `error : string | undefined` - only defined on failure, detailing the cause
     - `providerId : string | undefined` - only defined on success. The id of the created provider record
     - `secret : string | undefined` - only defined on success. The backend-generated secret for this provider
-  - This should be called by an authenticated user from the frontend. To prevent spam, a user can only have one unapproved provider at a time
+  - To prevent spam, a user can only have one unapproved provider at a time
+  - Verification logic lives in `convex/lib/wallet.ts` and is unit-tested in `tests/wallet.test.ts` (`bun test` from `packages/backend`). It uses `ox` for signature recovery because viem's recovery loads secp256k1 through a dynamic `import()`, which the Convex runtime rejects
 
 - `addModelSupport` : mutation
   - `args`:

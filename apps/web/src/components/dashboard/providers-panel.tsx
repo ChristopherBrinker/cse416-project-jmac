@@ -20,16 +20,18 @@ import {
   SelectValue,
 } from "@cse416-project-jmac/ui/components/select";
 import { useMutation, usePaginatedQuery, useQuery } from "convex/react";
-import { EyeIcon, EyeOffIcon, ServerIcon } from "lucide-react";
+import { EyeIcon, EyeOffIcon, ServerIcon, ShieldCheckIcon } from "lucide-react";
 import { useId, useState } from "react";
 import type { FormEvent } from "react";
-import { isAddress } from "viem";
+import { toast } from "sonner";
 
 import type { Model, Provider } from "@/lib/evaluations";
 import { formatDateTime } from "@/lib/evaluations";
 
 import { CopyButton } from "./copy-button";
+import type { BlockchainWalletState } from "./use-blockchain-wallet";
 import { useDashboardAction } from "./use-dashboard-action";
+import { useProviderRegistration } from "./use-provider-registration";
 
 function WorkerSecret({ secret }: { secret: string }) {
   const [showSecret, setShowSecret] = useState(false);
@@ -167,7 +169,12 @@ function ProviderCard({
       <CardContent className="space-y-5">
         <dl className="space-y-3 text-xs">
           <div>
-            <dt className="text-muted-foreground">Wallet address</dt>
+            <dt className="text-muted-foreground">
+              Wallet address
+              {provider.walletVerifiedAt === undefined
+                ? " · not verified (registered before signed challenges)"
+                : ` · verified ${formatDateTime(provider.walletVerifiedAt)}`}
+            </dt>
             <dd className="mt-1 flex items-center gap-1">
               <span className="min-w-0 font-mono break-all">
                 {provider.walletAddress}
@@ -344,9 +351,20 @@ function ProviderCard({
   );
 }
 
-export function ProvidersPanel({ models }: { models: Model[] }) {
-  const fieldId = useId();
-  const [address, setAddress] = useState("");
+const REGISTRATION_LABELS = {
+  idle: "Verify wallet and register",
+  challenge: "Requesting challenge…",
+  signing: "Sign the message in your wallet…",
+  verifying: "Verifying signature…",
+} as const;
+
+export function ProvidersPanel({
+  models,
+  walletState,
+}: {
+  models: Model[];
+  walletState: BlockchainWalletState;
+}) {
   const {
     results: providers,
     status,
@@ -356,30 +374,23 @@ export function ProvidersPanel({ models }: { models: Model[] }) {
     {},
     { initialNumItems: 6 }
   );
-  const registerProvider = useMutation(api.provider.register);
-  const { pending, error, run } = useDashboardAction();
+  const { wallet } = walletState;
+  const registration = useProviderRegistration(wallet);
   const loadingProviders = status === "LoadingFirstPage";
   const awaitingApproval = providers.some((provider) => !provider.approved);
-  const registrationDisabled = pending || loadingProviders || awaitingApproval;
-  const register = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const registrationDisabled =
+    !wallet ||
+    registration.step !== "idle" ||
+    loadingProviders ||
+    awaitingApproval;
+  const register = async () => {
     if (registrationDisabled) {
       return;
     }
-    const succeeded = await run(async () => {
-      const walletAddress = address.trim();
-      if (!isAddress(walletAddress, { strict: false })) {
-        throw new Error(
-          "Enter a wallet address with 0x followed by 40 hexadecimal characters."
-        );
-      }
-      const result = await registerProvider({ walletAddress });
-      if (!result.success) {
-        throw new Error(result.error);
-      }
-    }, "Provider registered. Approval is required before it can go ready.");
-    if (succeeded) {
-      setAddress("");
+    if (await registration.register()) {
+      toast.success(
+        "Wallet verified and provider registered. An administrator must approve it before it can go ready."
+      );
     }
   };
 
@@ -393,36 +404,45 @@ export function ProvidersPanel({ models }: { models: Model[] }) {
             supported models.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={register} className="grid gap-2">
-            <Label htmlFor={fieldId}>Provider wallet address</Label>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                id={fieldId}
-                value={address}
-                onChange={(event) => setAddress(event.target.value)}
-                placeholder="0x…"
-                autoComplete="off"
-                required
-                disabled={registrationDisabled}
-                className="font-mono"
-              />
-              <Button type="submit" disabled={registrationDisabled}>
-                {pending ? "Registering…" : "Register provider"}
-              </Button>
-            </div>
-            {awaitingApproval ? (
-              <p className="text-muted-foreground text-xs">
-                Wait for your existing provider to be approved before
-                registering another.
-              </p>
-            ) : null}
-            {error ? (
-              <p role="alert" className="text-destructive text-xs">
-                {error}
-              </p>
-            ) : null}
-          </form>
+        <CardContent className="grid gap-3">
+          <div className="grid gap-1 text-xs">
+            <p className="font-medium">Provider wallet</p>
+            <p className="text-muted-foreground">
+              The connected wallet becomes the provider&apos;s payout and
+              signing address. You prove you control it by signing a one-time
+              message (no transaction, no gas). Typing an address is not
+              accepted.
+            </p>
+            <p className="font-mono break-all">
+              {walletState.address ?? "No wallet connected"}
+            </p>
+          </div>
+          <Button
+            className="w-full sm:w-fit"
+            disabled={registrationDisabled}
+            onClick={register}
+          >
+            <ShieldCheckIcon data-icon="inline-start" />
+            {REGISTRATION_LABELS[registration.step]}
+          </Button>
+          {wallet ? null : (
+            <p className="text-muted-foreground text-xs">
+              {walletState.wrongNetwork
+                ? "Switch your wallet to the supported network to register a provider."
+                : "Connect the provider's wallet with the button at the top of the page."}
+            </p>
+          )}
+          {awaitingApproval ? (
+            <p className="text-muted-foreground text-xs">
+              Wait for your existing provider to be approved before registering
+              another.
+            </p>
+          ) : null}
+          {registration.error ? (
+            <p role="alert" className="text-destructive text-xs">
+              {registration.error}
+            </p>
+          ) : null}
         </CardContent>
       </Card>
       {loadingProviders ? (

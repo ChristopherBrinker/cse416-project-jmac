@@ -9,100 +9,66 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@cse416-project-jmac/ui/components/dialog";
-import { Input } from "@cse416-project-jmac/ui/components/input";
-import { Label } from "@cse416-project-jmac/ui/components/label";
-import { Separator } from "@cse416-project-jmac/ui/components/separator";
-import { KeyRoundIcon, WalletIcon } from "lucide-react";
-import { useId, useState } from "react";
-import type { FormEvent } from "react";
-import { useConnect, useConnectors, useSwitchChain } from "wagmi";
+import { TriangleAlertIcon, WalletIcon } from "lucide-react";
+import { useState } from "react";
+import { useConnect, useConnectors } from "wagmi";
 import type { Connector } from "wagmi";
 
-import { createPrivateKeyWallet, evaluationChain } from "@/lib/blockchain";
+import { describeWalletError, evaluationChain } from "@/lib/blockchain";
 import { truncateHash } from "@/lib/evaluations";
 
 import type { BlockchainWalletState } from "./use-blockchain-wallet";
-import { useDashboardAction } from "./use-dashboard-action";
 
-const PRIVATE_KEY_PATTERN = /^0x[\da-fA-F]{64}$/u;
-const SOURCE_LABELS = {
-  browser: "Browser wallet",
-  privateKey: "Private key",
-} as const;
+const GENERIC_INJECTED_ID = "injected";
 
-function BrowserWalletOptions({
-  walletState,
-  onConnected,
-}: {
-  walletState: BlockchainWalletState;
-  onConnected: () => void;
-}) {
+function ConnectorList({ onConnected }: { onConnected: () => void }) {
   // Typed as a list because EIP-6963 discovery adds wallets at runtime
-  const connectors: readonly Connector[] = useConnectors();
+  const allConnectors: readonly Connector[] = useConnectors();
+  // Prefer named wallets (MetaMask, …) over the generic window.ethereum entry
+  const discovered = allConnectors.filter(
+    (connector) => connector.id !== GENERIC_INJECTED_ID
+  );
+  const connectors = discovered.length > 0 ? discovered : allConnectors;
   const { mutateAsync: connect } = useConnect();
-  const { mutateAsync: switchChain } = useSwitchChain();
-  const { pending, error, run } = useDashboardAction();
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  if (walletState.browserWrongChain) {
+  const connectWith = async (connector: Connector) => {
+    setPendingId(connector.uid);
+    setError(null);
+    try {
+      await connect({ connector, chainId: evaluationChain.id });
+      onConnected();
+    } catch (connectError) {
+      setError(describeWalletError(connectError));
+    }
+    setPendingId(null);
+  };
+
+  if (connectors.length === 0) {
     return (
-      <div className="grid gap-2">
-        <p className="text-muted-foreground text-xs">
-          {walletState.browserAddress
-            ? `${truncateHash(walletState.browserAddress)} is connected to another network.`
-            : "Your browser wallet is connected to another network."}{" "}
-          Switch to {evaluationChain.name} (chain {evaluationChain.id}) to fund
-          and refund evaluations.
-        </p>
-        <Button
-          disabled={pending}
-          onClick={async () => {
-            const switched = await run(async () => {
-              await switchChain({ chainId: evaluationChain.id });
-            }, `Switched to ${evaluationChain.name}`);
-            if (switched) {
-              onConnected();
-            }
-          }}
-        >
-          {pending ? "Switching…" : `Switch to ${evaluationChain.name}`}
-        </Button>
-        {error ? (
-          <p role="alert" className="text-destructive text-xs">
-            {error}
-          </p>
-        ) : null}
-      </div>
+      <p className="text-muted-foreground text-xs">
+        No browser wallet was detected. Install MetaMask (or another EIP-1193
+        wallet), import a disposable Anvil test account into it, then reload
+        this page.
+      </p>
     );
   }
-
   return (
     <div className="grid gap-2">
-      {connectors.length === 0 ? (
-        <p className="text-muted-foreground text-xs">
-          No browser wallet was detected. Install MetaMask or another browser
-          wallet, or connect with a private key below.
-        </p>
-      ) : (
-        connectors.map((connector) => (
-          <Button
-            key={connector.uid}
-            variant="outline"
-            disabled={pending}
-            onClick={async () => {
-              const connected = await run(async () => {
-                walletState.clearPrivateKey();
-                await connect({ connector, chainId: evaluationChain.id });
-              }, `${connector.name} connected`);
-              if (connected) {
-                onConnected();
-              }
-            }}
-          >
-            <WalletIcon data-icon="inline-start" />
-            {pending ? "Waiting for wallet…" : `Connect ${connector.name}`}
-          </Button>
-        ))
-      )}
+      {connectors.map((connector) => (
+        <Button
+          key={connector.uid}
+          variant="outline"
+          disabled={pendingId !== null}
+          onClick={() => connectWith(connector)}
+        >
+          <WalletIcon data-icon="inline-start" />
+          {pendingId === connector.uid
+            ? "Approve the connection in your wallet…"
+            : `Connect ${connector.name}`}
+        </Button>
+      ))}
       {error ? (
         <p role="alert" className="text-destructive text-xs">
           {error}
@@ -112,63 +78,30 @@ function BrowserWalletOptions({
   );
 }
 
-function PrivateKeyForm({
+export function WrongNetworkNotice({
   walletState,
-  onConnected,
 }: {
   walletState: BlockchainWalletState;
-  onConnected: () => void;
 }) {
-  const fieldId = useId();
-  const [privateKey, setPrivateKey] = useState("");
-  const { pending, error, run } = useDashboardAction();
-  const connect = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const connected = await run(async () => {
-      if (!PRIVATE_KEY_PATTERN.test(privateKey)) {
-        throw new Error(
-          "Enter a private key with 0x followed by 64 hexadecimal characters."
-        );
-      }
-      const wallet = await createPrivateKeyWallet(privateKey as `0x${string}`);
-      walletState.connectPrivateKey(wallet);
-    }, "Wallet connected");
-    setPrivateKey("");
-    if (connected) {
-      onConnected();
-    }
+  const handleSwitch = async () => {
+    await walletState.switchToEvaluationChain();
   };
-
   return (
-    <form onSubmit={connect} className="grid gap-4">
-      <div className="grid gap-2">
-        <Label htmlFor={fieldId}>Private key</Label>
-        <Input
-          id={fieldId}
-          type="password"
-          autoComplete="off"
-          spellCheck={false}
-          value={privateKey}
-          onChange={(event) => setPrivateKey(event.target.value)}
-          placeholder="0x…"
-          required
-          disabled={pending}
-        />
-        <p className="text-muted-foreground text-xs">
-          The key stays in this page&apos;s memory and is cleared when you
-          disconnect or reload.
-        </p>
-      </div>
-      {error ? (
-        <p role="alert" className="text-destructive text-xs">
-          {error}
-        </p>
-      ) : null}
-      <Button type="submit" variant="outline" disabled={pending}>
-        <KeyRoundIcon data-icon="inline-start" />
-        {pending ? "Connecting…" : "Connect with private key"}
+    <div className="grid gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+      <p className="flex items-center gap-2 text-xs font-medium">
+        <TriangleAlertIcon className="size-4" aria-hidden="true" />
+        Wrong network
+      </p>
+      <p className="text-muted-foreground text-xs">
+        Your wallet is on chain {walletState.chainId ?? "unknown"}. JMAC only
+        supports {evaluationChain.name} (chain {evaluationChain.id}).
+      </p>
+      <Button size="sm" disabled={walletState.switching} onClick={handleSwitch}>
+        {walletState.switching
+          ? "Approve the switch in your wallet…"
+          : `Switch to ${evaluationChain.name}`}
       </Button>
-    </form>
+    </div>
   );
 }
 
@@ -180,36 +113,40 @@ export function WalletDialog({
   busy: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const { wallet } = walletState;
+  const { address, connected, wrongNetwork } = walletState;
   const close = () => setOpen(false);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
-        render={<Button variant="outline" className="rounded-full" />}
+        render={
+          <Button
+            variant={wrongNetwork ? "destructive" : "outline"}
+            className="rounded-full"
+          />
+        }
       >
         <WalletIcon data-icon="inline-start" />
-        {wallet ? truncateHash(wallet.address) : "Connect wallet"}
+        {address ? truncateHash(address) : "Connect wallet"}
+        {wrongNetwork ? " · wrong network" : null}
       </DialogTrigger>
       <DialogContent className="rounded-xl sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {wallet ? "Funding wallet" : "Connect a funding wallet"}
+            {connected ? "Connected wallet" : "Connect a browser wallet"}
           </DialogTitle>
           <DialogDescription>
-            Fund and refund evaluations on the configured {evaluationChain.name}{" "}
-            network with a browser wallet such as MetaMask, or with a
-            development wallet private key.
+            Your wallet signs every funding, refund, and provider verification
+            request. JMAC never asks for or stores a private key. Use only
+            disposable test funds on {evaluationChain.name}.
           </DialogDescription>
         </DialogHeader>
-        {wallet ? (
+        {connected && address ? (
           <div className="grid gap-4">
-            <div className="grid gap-1">
-              <p className="text-muted-foreground text-xs">
-                {SOURCE_LABELS[wallet.source]}
-              </p>
-              <p className="font-mono text-xs break-all">{wallet.address}</p>
-            </div>
+            <p className="font-mono text-xs break-all">{address}</p>
+            {wrongNetwork ? (
+              <WrongNetworkNotice walletState={walletState} />
+            ) : null}
             <Button
               variant="outline"
               disabled={busy}
@@ -220,20 +157,14 @@ export function WalletDialog({
             >
               Disconnect wallet
             </Button>
+            {busy ? (
+              <p className="text-muted-foreground text-xs">
+                Wait for the pending transaction before disconnecting.
+              </p>
+            ) : null}
           </div>
         ) : (
-          <div className="grid gap-4">
-            <BrowserWalletOptions
-              walletState={walletState}
-              onConnected={close}
-            />
-            <div className="flex items-center gap-3">
-              <Separator className="flex-1" />
-              <span className="text-muted-foreground text-xs">or</span>
-              <Separator className="flex-1" />
-            </div>
-            <PrivateKeyForm walletState={walletState} onConnected={close} />
-          </div>
+          <ConnectorList onConnected={close} />
         )}
       </DialogContent>
     </Dialog>

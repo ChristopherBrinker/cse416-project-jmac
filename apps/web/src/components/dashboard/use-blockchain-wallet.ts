@@ -1,51 +1,79 @@
 "use client";
 
-import { useState } from "react";
-import { useConnection, useDisconnect, useWalletClient } from "wagmi";
+import { useEffect, useRef } from "react";
+import { toast } from "sonner";
+import {
+  useConnection,
+  useDisconnect,
+  useSwitchChain,
+  useWalletClient,
+} from "wagmi";
 
-import { createBrowserWallet, evaluationChain } from "@/lib/blockchain";
-import type { BlockchainWallet } from "@/lib/blockchain";
+import {
+  createBrowserWallet,
+  describeWalletError,
+  evaluationChain,
+} from "@/lib/blockchain";
+import { truncateHash } from "@/lib/evaluations";
 
 /**
- * Combines the two ways to sign transactions: a pasted development private key
- * and a browser wallet (MetaMask or another injected provider) via wagmi.
- * Connecting one method disconnects the other so only one wallet is active.
+ * The connected browser wallet (MetaMask or another injected EIP-1193
+ * provider) via wagmi. The app never sees a private key: every transaction and
+ * signature is approved in the wallet. `wallet` is only defined when the
+ * wallet is connected to the supported network.
  */
 export function useBlockchainWallet() {
-  const [privateKeyWallet, setPrivateKeyWallet] = useState<BlockchainWallet>();
   const connection = useConnection();
-  const { mutate: disconnectBrowser } = useDisconnect();
+  const { mutate: disconnectWallet } = useDisconnect();
+  const { mutateAsync: switchChain, isPending: switching } = useSwitchChain();
   const onEvaluationChain = connection.chainId === evaluationChain.id;
-  const { data: browserWalletClient } = useWalletClient({
+  const { data: walletClient } = useWalletClient({
     chainId: evaluationChain.id,
     query: { enabled: connection.isConnected && onEvaluationChain },
   });
-  const browserWallet =
-    connection.isConnected && onEvaluationChain && browserWalletClient
-      ? createBrowserWallet(browserWalletClient)
+  const wallet =
+    connection.isConnected && onEvaluationChain && walletClient
+      ? createBrowserWallet(walletClient)
       : undefined;
 
-  const connectPrivateKey = (wallet: BlockchainWallet) => {
-    if (connection.isConnected) {
-      disconnectBrowser();
+  // Tell the user when the wallet switches accounts or disconnects underneath
+  // the page, since pending refund/funding checks depend on the address.
+  const previousAddress = useRef(connection.address);
+  useEffect(() => {
+    const previous = previousAddress.current;
+    previousAddress.current = connection.address;
+    if (!previous || previous === connection.address) {
+      return;
     }
-    setPrivateKeyWallet(wallet);
-  };
-  const disconnect = () => {
-    setPrivateKeyWallet(undefined);
-    if (connection.isConnected) {
-      disconnectBrowser();
+    if (connection.address) {
+      toast.info(
+        `Wallet account changed to ${truncateHash(connection.address)}.`
+      );
+    } else {
+      toast.info("Wallet disconnected.");
+    }
+  }, [connection.address]);
+
+  const switchToEvaluationChain = async (): Promise<boolean> => {
+    try {
+      await switchChain({ chainId: evaluationChain.id });
+      return true;
+    } catch (error) {
+      toast.error(describeWalletError(error));
+      return false;
     }
   };
 
   return {
-    wallet: privateKeyWallet ?? browserWallet,
-    browserConnected: connection.isConnected,
-    browserAddress: connection.address,
-    browserWrongChain: connection.isConnected && !onEvaluationChain,
-    clearPrivateKey: () => setPrivateKeyWallet(undefined),
-    connectPrivateKey,
-    disconnect,
+    wallet,
+    connected: connection.isConnected,
+    connecting: connection.isConnecting || connection.isReconnecting,
+    address: connection.address,
+    chainId: connection.chainId,
+    wrongNetwork: connection.isConnected && !onEvaluationChain,
+    switching,
+    switchToEvaluationChain,
+    disconnect: () => disconnectWallet(),
   };
 }
 
