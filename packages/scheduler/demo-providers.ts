@@ -58,6 +58,18 @@ const parseMode = (value: string | undefined): Mode => {
   return "agree";
 };
 
+const runAfter = async (
+  previous: Promise<void>,
+  task: () => Promise<void>
+): Promise<void> => {
+  try {
+    await previous;
+  } catch {
+    // The previous send's own caller reports its failure
+  }
+  await task();
+};
+
 const parseScores = (value: string): boolean[] =>
   value.split(",").map((item) => item.trim() === "1");
 
@@ -106,7 +118,7 @@ async function main() {
     transport: http(rpcUrl),
     pollingInterval: POLLING_INTERVAL_MS,
   });
-  const send = async (
+  const sendNow = async (
     provider: SimulatedProvider,
     functionName: "commitResult" | "revealResult" | "claimPayment",
     args: readonly unknown[]
@@ -126,6 +138,22 @@ async function main() {
     const hash = await walletClient.writeContract(request);
     await publicClient.waitForTransactionReceipt({ hash });
     console.log(`[provider ${provider.label}] ${functionName} ${hash}`);
+  };
+
+  // Event batches for different jobs run concurrently; chain sends so two
+  // transactions from one provider account never pick the same nonce. A
+  // failed send is logged by its caller and does not block later ones.
+  let sendQueue: Promise<void> = Promise.resolve();
+  const send = (
+    provider: SimulatedProvider,
+    functionName: "commitResult" | "revealResult" | "claimPayment",
+    args: readonly unknown[]
+  ): Promise<void> => {
+    const queued = runAfter(sendQueue, () =>
+      sendNow(provider, functionName, args)
+    );
+    sendQueue = queued;
+    return queued;
   };
 
   const heartbeat = async () => {
