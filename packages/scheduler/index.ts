@@ -13,6 +13,8 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
 
+import { specHash } from "./spec";
+
 interface SolidityEvent {
   eventName: string;
   args: any;
@@ -22,10 +24,11 @@ interface struct_provider {
   addr: string;
   id: string;
   commit: string;
-  result: boolean[];
+  outputDigest: string;
   flag: boolean;
   revealed: boolean;
   claimed: boolean;
+  correctCount: bigint;
 }
 type struct_job = [
   // creatorAddr
@@ -44,7 +47,18 @@ type struct_job = [
   number,
   // commitDeadline
   bigint,
+  // specHash
+  string,
+  // itemCount
+  bigint,
 ];
+
+const JOB_STATUS_COMPLETE = 1;
+const JOB_STATUS_REFUNDED = 3;
+
+// The accepted score is derived only from the agreed on-chain count, never from mutable records.
+const percentScore = (correctCount: bigint, itemCount: bigint): number =>
+  (Number(correctCount) / Number(itemCount)) * 100;
 
 async function main() {
   if (!process.env.BACKEND_WALLET_PRIVATE_KEY) {
@@ -152,18 +166,11 @@ async function main() {
                 const providerBCommitted = providerB.commit !== EMPTY_COMMIT;
                 if (providerACommitted && providerBCommitted) {
                   if (providerA.revealed && providerB.revealed) {
-                    if (job[6] === 1) {
+                    if (job[6] === JOB_STATUS_COMPLETE) {
                       status = "succeeded";
                       endStateA = "succeeded";
                       endStateB = "succeeded";
-                      const scores = job[3].result;
-                      let correct = 0;
-                      for (const s of scores) {
-                        if (s) {
-                          correct++;
-                        }
-                      }
-                      score = (correct / scores.length) * 100;
+                      score = percentScore(providerA.correctCount, job[9]);
                     } else {
                       status = "failed";
                       endStateA = "disagreement";
@@ -251,7 +258,11 @@ async function main() {
     if (!providerAssignment.providers) {
       return providerAssignment;
     }
-    const providers = providerAssignment.providers;
+    const { providers, spec } = providerAssignment;
+    if (!spec?.itemCount) {
+      console.log(`Missing evaluation spec for ${jobId}`);
+      return providerAssignment;
+    }
 
     const { request } = await publicClient.simulateContract({
       account,
@@ -264,6 +275,8 @@ async function main() {
         providers[0]._id,
         providers[1].walletAddress,
         providers[1]._id,
+        specHash(spec.contentHash, spec.modelId),
+        BigInt(spec.itemCount),
       ],
     });
     const hash = await walletClient.writeContract(request);
@@ -316,7 +329,7 @@ async function main() {
               args: [jobId],
             })) as struct_job;
 
-            if (job[6] === 3) {
+            if (job[6] === JOB_STATUS_REFUNDED) {
               continue;
             }
 
@@ -341,14 +354,10 @@ async function main() {
             console.log(`Updated ${jobId} status to failed`);
           } else if (decoded.eventName === "JobComplete") {
             const jobId = decoded.args.jobId as Id<"jobs">;
-            const scores = decoded.args.scores as boolean[];
-            let correct = 0;
-            for (const s of scores) {
-              if (s) {
-                correct++;
-              }
-            }
-            const score = (correct / scores.length) * 100;
+            const score = percentScore(
+              decoded.args.correctCount as bigint,
+              decoded.args.itemCount as bigint
+            );
 
             const statusResult = await convexClient.mutation(
               api.job.setStatus,

@@ -1,7 +1,11 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
+import type { Doc } from "./_generated/dataModel";
 import { query, mutation } from "./_generated/server";
+
+// Available providers considered per assignment, keeping the read bounded.
+const MAX_PROVIDER_CANDIDATES = 20;
 
 export const createJob = mutation({
   args: {
@@ -92,24 +96,49 @@ export const assignProviders = mutation({
       jobFunded_tx: args.jobFunded_tx,
     });
 
-    // This will be turned into a sensible algorithm later
-    const model_support = await ctx.db
+    const benchmark = await ctx.db.get("benchmarks", job.benchmarkId);
+    if (!benchmark?.itemCount) {
+      return {
+        success: false,
+        error: "Benchmark has no recorded item count; re-upload it",
+      };
+    }
+
+    const candidates = await ctx.db
       .query("model_support")
       .withIndex("by_modelId_available", (q) =>
         q.eq("modelId", job.modelId).eq("available", true)
       )
-      .take(2);
+      .take(MAX_PROVIDER_CANDIDATES);
 
-    if (model_support.length !== 2) {
+    // Approval means a platform administrator set `approved` in the Convex dashboard (no app
+    // mutation grants it, so providers cannot approve themselves). The job
+    // creator never evaluates their own job, and two providers registered by the same user
+    // or sharing a wallet are never paired, so one account cannot supply both results.
+    const providers: Doc<"providers">[] = [];
+    for (const ms of candidates) {
+      const p = await ctx.db.get("providers", ms.providerId);
+      const independent =
+        p !== null &&
+        p.approved &&
+        p.userId !== job.creatorId &&
+        !providers.some(
+          (chosen) =>
+            chosen.userId === p.userId ||
+            chosen.walletAddress.toLowerCase() === p.walletAddress.toLowerCase()
+        );
+      if (independent) {
+        providers.push(p);
+      }
+      if (providers.length === 2) {
+        break;
+      }
+    }
+
+    if (providers.length !== 2) {
       return { success: false, error: "Providers unavailable" };
     }
 
-    const providers = await Promise.all(
-      model_support.map(async (ms) => {
-        const p = await ctx.db.get("providers", ms.providerId);
-        return p!;
-      })
-    );
     for (const p of providers) {
       await ctx.db.patch("providers", p._id, {
         currentJobs: p.currentJobs + 1n,
@@ -130,7 +159,17 @@ export const assignProviders = mutation({
         finished: false,
       });
     }
-    return { success: true, providers };
+    // The scheduler records keccak256(abi.encode(contentHash, modelId)) and itemCount
+    // on-chain, so the evaluated benchmark bytes and model are fixed for the whole job.
+    return {
+      success: true,
+      providers,
+      spec: {
+        contentHash: benchmark.contentHash,
+        modelId: job.modelId,
+        itemCount: benchmark.itemCount,
+      },
+    };
   },
 });
 

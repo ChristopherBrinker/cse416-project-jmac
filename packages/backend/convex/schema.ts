@@ -10,6 +10,8 @@ export default defineSchema({
     description: v.string(),
     version: v.string(),
     contentHash: v.string(),
+    // recorded on-chain at assignment; benchmarks uploaded before this field need re-uploading
+    itemCount: v.optional(v.number()),
   })
     .index("by_ownerId_name_version", ["ownerId", "name", "version"])
     .searchIndex("search_name", {

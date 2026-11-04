@@ -8,7 +8,8 @@
   "scripts": {
     "dev": "tsx ./index.ts",
     "lint": "oxlint .",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@cse416-project-jmac/backend": "workspace:*",
