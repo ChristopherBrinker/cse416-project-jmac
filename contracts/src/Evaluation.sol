@@ -176,9 +176,11 @@ contract Evaluation {
         require(msg.sender == j.creatorAddr, "Unauthorized");
 
         j.status = JobStatus.Refunded;
-        if (timedOut) {
+
+        // Removed for now: scheduler expects JobFailed to only signify disagreement
+        /*if (timedOut) {
             emit JobFailed(jobId);
-        }
+        }*/
 
         (bool success,) = msg.sender.call{value: j.price}("");
         require(success, "Transfer failed");
@@ -199,23 +201,5 @@ contract Evaluation {
             return j.providerB;
         }
         revert("Unauthorized");
-    }
-
-    // Used by scheduler after timeout to determine what the reason for timeout was
-    // Returns [A_id_defined, A_did_commit, A_did_reveal, B_id_defined, B_did_commit, B_did_reveal]
-    function getProviderStates(string memory jobId) public view returns (bool[] memory) {
-        Job memory j = jobs[jobId];
-        require(j.flag, "Job not found");
-        bool[] memory ret = new bool[](6);
-
-        ret[0] = bytes(j.providerA.id).length > 0;
-        ret[1] = j.providerA.commit != bytes32(0);
-        ret[2] = j.providerA.revealed;
-
-        ret[3] = bytes(j.providerB.id).length > 0;
-        ret[4] = j.providerB.commit != bytes32(0);
-        ret[5] = j.providerB.revealed;
-
-        return ret;
     }
 }

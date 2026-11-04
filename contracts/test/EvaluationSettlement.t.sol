@@ -506,8 +506,8 @@ contract EvaluationSettlementTest is Test {
     }
 
     function test_WindowsMatchTheAgreedTiming() public view {
-        assertEq(evaluation.COMMIT_WINDOW(), 30 minutes);
-        assertEq(evaluation.REVEAL_WINDOW(), 15 minutes);
+        assertEq(evaluation.COMMIT_WINDOW(), 5 minutes);
+        assertEq(evaluation.REVEAL_WINDOW(), 2.5 minutes);
     }
 
     function test_CommitAllowedAtTheDeadline() public {

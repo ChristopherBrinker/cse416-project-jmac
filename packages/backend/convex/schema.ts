@@ -58,6 +58,7 @@ export default defineSchema({
       reveal_timeout: both providers committed, provider did not reveal
       submitted: sent a commit/reveal while the other timed out
       disagreement: both revealed, results mismatched
+      succeeded: job completed successfully (JobComplete event)
     */
     endState: v.optional(v.string()),
   })

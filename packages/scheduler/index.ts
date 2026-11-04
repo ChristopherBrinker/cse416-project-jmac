@@ -18,6 +18,34 @@ interface SolidityEvent {
   args: any;
 }
 
+interface struct_provider {
+  addr: string;
+  id: string;
+  commit: string;
+  result: boolean[];
+  flag: boolean;
+  revealed: boolean;
+  claimed: boolean;
+}
+type struct_job = [
+  // creatorAddr
+  string,
+  // id
+  string,
+  // price
+  bigint,
+  // providerA
+  struct_provider,
+  // providerB
+  struct_provider,
+  // flag
+  boolean,
+  // status
+  number,
+  // commitDeadline
+  bigint,
+];
+
 async function main() {
   if (!process.env.BACKEND_WALLET_PRIVATE_KEY) {
     throw new Error("Provide the private key of the backend wallet");
@@ -102,32 +130,58 @@ async function main() {
           result.jobIds.map(async (id) => {
             let endStateA: string | undefined;
             let endStateB: string | undefined;
+            let status = "failed";
+            let score: number | undefined;
 
-            // Determine state of each provider
             try {
-              // [A_id_defined, A_did_commit, A_did_reveal, B_id_defined, B_did_commit, B_did_reveal]
-              const providerStates = (await publicClient.readContract({
+              const job = (await publicClient.readContract({
                 address: CONTRACT_ADDRESS,
                 abi,
-                functionName: "getProviderStates",
+                functionName: "jobs",
                 args: [id],
-              })) as boolean[];
+              })) as struct_job;
 
-              const wasAssigned = providerStates[0] && providerStates[3];
+              const providerA = job[3];
+              const providerB = job[4];
+
+              const wasAssigned = providerA.flag && providerB.flag;
               if (wasAssigned) {
-                const commitComplete = providerStates[1] && providerStates[4];
-                if (commitComplete) {
-                  endStateA = providerStates[2]
-                    ? "submitted"
-                    : "reveal_timeout";
-                  endStateB = providerStates[5]
-                    ? "submitted"
-                    : "reveal_timeout";
+                const EMPTY_COMMIT =
+                  "0x0000000000000000000000000000000000000000000000000000000000000000";
+                const providerACommitted = providerA.commit !== EMPTY_COMMIT;
+                const providerBCommitted = providerB.commit !== EMPTY_COMMIT;
+                if (providerACommitted && providerBCommitted) {
+                  if (providerA.revealed && providerB.revealed) {
+                    if (job[6] === 1) {
+                      status = "succeeded";
+                      endStateA = "succeeded";
+                      endStateB = "succeeded";
+                      const scores = job[3].result;
+                      let correct = 0;
+                      for (const s of scores) {
+                        if (s) {
+                          correct++;
+                        }
+                      }
+                      score = (correct / scores.length) * 100;
+                    } else {
+                      status = "failed";
+                      endStateA = "disagreement";
+                      endStateB = "disagreement";
+                    }
+                  } else {
+                    endStateA = providerA.revealed
+                      ? "submitted"
+                      : "reveal_timeout";
+                    endStateB = providerB.revealed
+                      ? "submitted"
+                      : "reveal_timeout";
+                  }
                 } else {
-                  endStateA = providerStates[1]
+                  endStateA = providerACommitted
                     ? "submitted"
                     : "commit_timeout";
-                  endStateB = providerStates[4]
+                  endStateB = providerBCommitted
                     ? "submitted"
                     : "commit_timeout";
                 }
@@ -137,6 +191,7 @@ async function main() {
               }
             } catch {
               console.log(`Failed to get job ${id} from blockchain`);
+              return;
             }
 
             try {
@@ -144,7 +199,8 @@ async function main() {
                 api.job.setStatus,
                 {
                   jobId: id,
-                  status: "failed",
+                  status,
+                  score,
                   endStateA,
                   endStateB,
                   backendKey: BACKEND_CONVEX_KEY,
@@ -157,7 +213,7 @@ async function main() {
                 );
                 return;
               }
-              console.log(`Updated ${id} status to failed`);
+              console.log(`Updated ${id} status`);
             } catch (error) {
               console.log(`Failed to set status for ${id}:`, error);
             }

@@ -172,11 +172,13 @@ export const setStatus = mutation({
     }
 
     if (args.status === "failed") {
-      let failureReason = "Timed out";
+      let failureReason: string | undefined;
       if (args.endStateA === "disagreement") {
         failureReason = "Providers disagreed on results";
       } else if (args.endStateA === "assignment_failed") {
         failureReason = "Provider assignment failed";
+      } else if (args.endStateA !== undefined) {
+        failureReason = "Timed out";
       }
       await ctx.db.patch("jobs", job._id, {
         status: args.status,
