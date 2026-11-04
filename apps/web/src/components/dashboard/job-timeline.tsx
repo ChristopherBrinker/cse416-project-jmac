@@ -39,6 +39,33 @@ const isOutcomeStage = (lifecycle: JobLifecycle): boolean =>
     lifecycle.stage
   );
 
+const FUNDED_STAGES = new Set<JobLifecycle["stage"]>([
+  "funding_confirmed",
+  "evaluation_pending",
+  "accepted",
+  "expired",
+  "refund_pending",
+  "refunded",
+]);
+
+/**
+ * State for a step the job never visibly reached. Only on-chain evidence
+ * marks it as an error; without contract data an accepted job's earlier
+ * steps are treated as done and others as unknown.
+ */
+const unreachedState = (
+  lifecycle: JobLifecycle,
+  chainJob: OnChainJob | undefined
+): StepState => {
+  if (!isOutcomeStage(lifecycle)) {
+    return "upcoming";
+  }
+  if (!chainJob) {
+    return lifecycle.stage === "accepted" ? "complete" : "upcoming";
+  }
+  return "error";
+};
+
 const getFundingStep = (
   lifecycle: JobLifecycle,
   chainJob: OnChainJob | undefined
@@ -52,12 +79,27 @@ const getFundingStep = (
       state: "current",
     };
   }
-  if (chainJob?.funded || lifecycle.stage !== "awaiting_funding") {
+  const confirmed: TimelineStep = {
+    key: "funding",
+    label: "Funding confirmed",
+    detail: "The job price was sent to the evaluation contract's escrow.",
+    state: "complete",
+  };
+  if (chainJob?.funded) {
+    return confirmed;
+  }
+  if (lifecycle.stage !== "awaiting_funding") {
+    if (!chainJob && FUNDED_STAGES.has(lifecycle.stage)) {
+      // The scheduler only advances jobs after seeing the funding event
+      return confirmed;
+    }
     return {
       key: "funding",
-      label: "Funding confirmed",
-      detail: "The job price is held in escrow by the evaluation contract.",
-      state: "complete",
+      label: chainJob ? "Never funded" : "Funding",
+      detail: chainJob
+        ? "This job was never funded on-chain, so no escrow exists."
+        : "Funding status is unavailable until the contract can be read.",
+      state: chainJob ? "error" : "upcoming",
     };
   }
   return {
@@ -96,7 +138,7 @@ const getAssignmentStep = (
     key: "assignment",
     label: "Provider assignment",
     detail: "The scheduler assigns two providers after funding.",
-    state: isOutcomeStage(lifecycle) ? "error" : "upcoming",
+    state: unreachedState(lifecycle, chainJob),
   };
 };
 
@@ -138,7 +180,7 @@ const getEvaluationStep = (
     detail: chainJob?.funded
       ? counts
       : "Providers commit a result hash, then reveal it.",
-    state: isOutcomeStage(lifecycle) ? "error" : "upcoming",
+    state: unreachedState(lifecycle, chainJob),
   };
 };
 
