@@ -16,14 +16,15 @@ jobs:
       - run: bun run lint
       - run: bun run format:check
       - run: bun run check-types
-      # spec-hash vector shared with the contract and worker tests
-      - run: bun test packages/scheduler
+      # web, backend and scheduler unit tests (incl. the spec-hash vector shared with contract and worker)
+      - run: bun run test
   contracts:
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: contracts
     steps:
+      # forge-std is vendored under contracts/lib, so no submodule checkout
       - uses: actions/checkout@v4
       - uses: foundry-rs/foundry-toolchain@v1
       - uses: oven-sh/setup-bun@v2

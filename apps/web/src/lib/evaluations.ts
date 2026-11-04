@@ -19,10 +19,18 @@ export const matchesFilter = (job: EvaluationJob, filter: JobFilter): boolean =>
   filter === "all" ||
   (filter === "active" ? job.status === "funded" : job.status === filter);
 
-export const getErrorMessage = (error: unknown): string =>
-  error instanceof Error
-    ? error.message
-    : "Something went wrong. Please try again.";
+const hasShortMessage = (
+  error: Error
+): error is Error & { shortMessage: string } =>
+  "shortMessage" in error && typeof error.shortMessage === "string";
+
+export const getErrorMessage = (error: unknown): string => {
+  if (!(error instanceof Error)) {
+    return "Something went wrong. Please try again.";
+  }
+  // viem errors carry a readable summary alongside a long debug message
+  return hasShortMessage(error) ? error.shortMessage : error.message;
+};
 
 const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -37,5 +45,11 @@ export const formatDateTime = (value: number): string =>
   `${dateTimeFormatter.format(new Date(value))} UTC`;
 export const formatWei = (value: bigint): string =>
   `${value.toLocaleString("en-US")} wei`;
+const scoreFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 1,
+});
+
+export const formatScore = (score: number | undefined): string =>
+  score === undefined ? "—" : `${scoreFormatter.format(score)}%`;
 export const truncateHash = (hash: string): string =>
   hash.length <= 16 ? hash : `${hash.slice(0, 8)}…${hash.slice(-6)}`;

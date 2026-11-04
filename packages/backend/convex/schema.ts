@@ -22,10 +22,12 @@ export default defineSchema({
 
   models: defineTable({
     name: v.string(),
-  }).searchIndex("search_name", {
-    searchField: "name",
-    staged: false,
-  }),
+  })
+    .index("by_name", ["name"])
+    .searchIndex("search_name", {
+      searchField: "name",
+      staged: false,
+    }),
 
   jobs: defineTable({
     creatorId: v.string(),
@@ -72,6 +74,8 @@ export default defineSchema({
     userId: v.string(),
     secret: v.string(),
     walletAddress: v.string(),
+    // Set when the wallet was proven with a signed, single-use challenge
+    walletVerifiedAt: v.optional(v.number()),
     approved: v.boolean(),
     maxJobs: v.int64(),
     currentJobs: v.int64(),
@@ -80,7 +84,19 @@ export default defineSchema({
   })
     .index("by_userId_approved", ["userId", "approved"])
     .index("by_userId", ["userId"])
-    .index("by_status_lastHeartbeat", ["status", "lastHeartbeat"]),
+    .index("by_status_lastHeartbeat", ["status", "lastHeartbeat"])
+    .index("by_walletAddress", ["walletAddress"]),
+
+  /* Single-use wallet ownership challenges (see convex/lib/wallet.ts).
+    A provider wallet is only registered after its owner signs one. */
+  wallet_challenges: defineTable({
+    userId: v.string(),
+    walletAddress: v.string(),
+    nonce: v.string(),
+    message: v.string(),
+    expiresAt: v.number(),
+    used: v.boolean(),
+  }).index("by_userId_and_used", ["userId", "used"]),
 
   model_support: defineTable({
     providerId: v.id("providers"),

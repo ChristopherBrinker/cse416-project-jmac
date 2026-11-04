@@ -4,6 +4,7 @@ import asyncio
 import json
 import tempfile
 import unittest
+from hashlib import sha256
 from pathlib import Path
 from threading import Event
 from unittest.mock import MagicMock, Mock
@@ -24,6 +25,7 @@ from jmac_worker.provider_api import (
     ProviderClient,
     ProviderConfig,
 )
+from jmac_worker.specification import supported_settings, validate_specification
 
 RECORD = {
     "jobId": "job",
@@ -31,10 +33,26 @@ RECORD = {
     "modelId": "model",
     "finished": False,
 }
-ASSIGNMENT = Assignment("job", "provider", "model")
+
 BENCHMARK = (
     Path(__file__).resolve().parents[1] / "examples/benchmark.json"
 ).read_bytes()
+
+
+RECORD["specification"] = {
+    **supported_settings(),
+    "benchmark_id": "benchmark",
+    "benchmark_version": json.loads(BENCHMARK)["version"],
+    "benchmark_sha256": sha256(BENCHMARK).hexdigest(),
+    "item_count": 3,
+    "commit_deadline": 4102444800,
+    "reveal_deadline": 4102444900,
+    "chain_id": 31337,
+    "contract_address": "0x" + "12" * 20,
+}
+ASSIGNMENT = Assignment(
+    "job", "provider", "model", validate_specification(RECORD["specification"])
+)
 
 
 class FakeSubscription:

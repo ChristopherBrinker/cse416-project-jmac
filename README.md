@@ -1,6 +1,10 @@
 # JMAC — Private AI Benchmarking
 
-JMAC is our CSE 416 project for private AI benchmarking. The repository provides the web application, authentication, benchmark uploads, a scheduler for funded jobs, and a Docker-packaged Python benchmark evaluator with provider readiness and heartbeats. The Evaluation contract supports funding, provider assignment, bound and salted result commitments, reveal and agreement checking, provider payouts, and creator refunds after disagreement or a deadline; workers fetch assignments and settle on-chain. What an accepted result proves is defined in [docs/m4/protocol.md](docs/m4/protocol.md). See the [worker guide](workers/README.md) for pinned local model inference, provider setup, scoring, and repeatability checks.
+JMAC is our CSE 416 project for private AI benchmarking. The repository provides the web application, authentication, benchmark uploads, a scheduler for funded jobs, the `Evaluation` contract, and a Docker-packaged Python benchmark evaluator with provider readiness and heartbeats.
+
+The contract implements funding, provider assignment, bound and salted result commitments over a digest of the ordered predictions, commit and reveal deadlines, settlement when both providers match, provider payment claims, and creator refunds after a disagreement or a missed deadline. What an accepted result proves is defined in [docs/m4/protocol.md](docs/m4/protocol.md). The worker can execute assignments and commit, reveal, and claim on-chain (opt-in flags; see the [worker guide](workers/README.md)). The dashboard signs every transaction in a **browser wallet** (MetaMask or any EIP-1193 wallet). It never asks for a private key. It shows each job's lifecycle, an evaluation receipt for accepted results verified against the contract, and a creator-signed refund for failed or expired jobs. Provider wallets are registered only after a signed ownership challenge.
+
+Only a local Anvil chain (ID 31337) is supported. Known gaps are tracked in the [M4 requirements checklist](docs/m4/requirements.md). To run the end-to-end demo, follow the [demo instructions](docs/demo.md).
 
 The application uses Next.js App Router and TypeScript, Convex for the backend, and Better Auth for email/password authentication through the supported Convex component. Bun workspaces and Turborepo manage the monorepo; Ultracite with Oxlint/Oxfmt and Lefthook handle code checks.
 
@@ -92,6 +96,8 @@ bun run dev
 
 Open [http://localhost:7346](http://localhost:7346), create an account at `/sign-up`, sign in at `/sign-in`, and visit `/dashboard`. A successful connection shows the backend as connected (the private query returns “This is private”). Also go to `/dev-sandbox` for a minimal interface for the current interactions.
 
+To fund jobs, connect a browser wallet such as MetaMask. Import an Anvil test account into the wallet; the app adds the local network (chain 31337) when you connect. Never paste a key into the site. Approve providers and seed models with the admin-only CLI functions in the [backend guide](packages/backend/README.md#admin).
+
 ## Account configuration
 
 Authentication runs entirely in Convex using `@convex-dev/better-auth`; its component stores users, password accounts, and sessions in Convex. No additional database or auth service is needed. There are no existing accounts to migrate.
@@ -115,6 +121,7 @@ Run `bun install --frozen-lockfile` after pulling dependency changes. Git hooks 
 ```sh
 bun run check         # Lint and formatting checks
 bun run check-types   # TypeScript checks for web, UI, and backend
+bun run test          # Unit tests (web job lifecycle, backend wallet challenges)
 bun run fix           # Apply Ultracite fixes and formatting
 ```
 
@@ -146,7 +153,7 @@ The dashboard checks Better Auth authentication on the server and waits for Conv
 
 ## CI and verification
 
-GitHub Actions uses Bun 1.4.0 and frozen installs to run lint, formatting, and TypeScript checks. The `contracts` job runs `forge fmt --check`, `forge test`, the ABI drift check, and the Anvil settlement run (`contracts/script/e2e-settlement.sh`, uploaded as the `settlement-evidence` artifact). The `workers` job runs ruff and the full worker unittest suite. Settlement policy and the acceptance matrix are in [docs/m4](docs/m4/protocol.md). A separate build job requires repository Actions secrets `NEXT_PUBLIC_CONVEX_URL` and `NEXT_PUBLIC_CONVEX_SITE_URL`. A maintainer enables it with repository variable `INTEGRATION_BUILD_ENABLED=true`. The workflow does not deploy Convex.
+GitHub Actions uses Bun 1.4.0 and frozen installs to run lint, formatting, TypeScript checks, and unit tests. The `contracts` job runs `forge fmt --check`, `forge test`, the ABI drift check, and the Anvil settlement run (`contracts/script/e2e-settlement.sh`, uploaded as the `settlement-evidence` artifact). The `workers` job runs ruff and the full worker unittest suite. Settlement policy and the acceptance matrix are in [docs/m4](docs/m4/protocol.md). A separate build job requires repository Actions secrets `NEXT_PUBLIC_CONVEX_URL` and `NEXT_PUBLIC_CONVEX_SITE_URL`. A maintainer enables it with repository variable `INTEGRATION_BUILD_ENABLED=true`. The workflow does not deploy Convex.
 
 Static checks run without account credentials. Production builds, deployment-aware Convex code generation, and live authentication checks require a configured Convex deployment and environment values.
 

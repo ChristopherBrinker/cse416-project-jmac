@@ -6,8 +6,15 @@ import { useQuery, useMutation, usePaginatedQuery } from "convex/react";
 import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
-import { contractAddress, createBlockchainClient } from "@/lib/blockchain";
-import type { BlockchainClient } from "@/lib/blockchain";
+import {
+  describeWalletError,
+  waitForTransactionSuccess,
+  writeJobTransaction,
+} from "@/lib/blockchain";
+
+import { useBlockchainWallet } from "./dashboard/use-blockchain-wallet";
+import { useProviderRegistration } from "./dashboard/use-provider-registration";
+import { WalletDialog } from "./dashboard/wallet-dialog";
 
 const handleSubmit = async (formData: FormData) => {
   let token;
@@ -51,9 +58,9 @@ const handleSubmit = async (formData: FormData) => {
 };
 
 export default function DevSandbox() {
-  const [blockchainClient, setBlockchainClient] = useState<
-    BlockchainClient | undefined
-  >();
+  const walletState = useBlockchainWallet();
+  const blockchainClient = walletState.wallet;
+  const registration = useProviderRegistration(blockchainClient);
 
   const [searchBenchmarkName, setSearchBenchmarkName] = useState<
     string | undefined
@@ -78,7 +85,6 @@ export default function DevSandbox() {
     loadMore: jobListLoadMore,
   } = usePaginatedQuery(api.job.getUserJobs, {}, { initialNumItems: 5 });
 
-  const registerProvider = useMutation(api.provider.register);
   const {
     results: providers,
     status: providersStatus,
@@ -93,35 +99,19 @@ export default function DevSandbox() {
   const removeModelSupport = useMutation(api.provider.removeModelSupport);
   const providerSetStatus = useMutation(api.provider.setStatus);
 
-  const connectToBlockchain = async (formData: FormData) => {
-    const privateKey = String(formData.get("privateKey"));
-    if (privateKey && privateKey.slice(0, 2) === "0x") {
-      const pk = privateKey as `0x${string}`;
-      setBlockchainClient(await createBlockchainClient(pk));
-      alert("Connected successfully");
-    } else {
-      alert("Invalid private key");
-    }
-  };
-
   const fundJob = async (jobId: Id<"jobs">) => {
     if (blockchainClient) {
       try {
-        const { request } =
-          await blockchainClient.publicClient.simulateContract({
-            account: blockchainClient.account,
-            address: contractAddress,
-            abi: blockchainClient.abi,
-            functionName: "fundJob",
-            args: [String(jobId)],
-            value: 2500n,
-          });
-        const hash = await blockchainClient.walletClient.writeContract(request);
-        await blockchainClient.publicClient.waitForTransactionReceipt({ hash });
+        const hash = await writeJobTransaction(
+          blockchainClient,
+          "fundJob",
+          jobId,
+          2500n
+        );
+        await waitForTransactionSuccess(hash);
         alert("success");
       } catch (error) {
-        console.log(error);
-        alert(error);
+        alert(describeWalletError(error));
       }
     }
   };
@@ -163,17 +153,9 @@ export default function DevSandbox() {
     }
   };
 
-  const handleRegister = async (formData: FormData) => {
-    try {
-      const providerAddress = String(formData.get("providerAddress"));
-      const ret = await registerProvider({ walletAddress: providerAddress });
-      console.log(ret);
-      if (!ret.success) {
-        alert(ret.error);
-      }
-    } catch (error) {
-      console.log(error);
-      alert(error);
+  const handleRegister = async () => {
+    if (await registration.register()) {
+      alert("Provider registered with a verified wallet");
     }
   };
 
@@ -246,24 +228,16 @@ export default function DevSandbox() {
     <main className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:py-8">
       <div id="blockchain-stuff">
         <div>
-          Connect wallet (enter private key directly - sufficient for mvp)
-          <form action={connectToBlockchain}>
-            <div>
-              <input
-                type="text"
-                id="privateKey"
-                name="privateKey"
-                placeholder="Wallet private key"
-                style={{ border: "1px solid black" }}
-              />
-            </div>
-            <div>
-              <button style={{ backgroundColor: "ButtonFace" }} type="submit">
-                Send
-              </button>
-            </div>
-          </form>
-          {blockchainClient ? <div>Connected</div> : ""}
+          Connect a browser wallet (MetaMask with a disposable Anvil test
+          account). Private keys are never entered on this site.
+          <div>
+            <WalletDialog walletState={walletState} busy={false} />
+          </div>
+          {blockchainClient ? (
+            <div>Connected as {blockchainClient.address}</div>
+          ) : (
+            ""
+          )}
         </div>
       </div>
       <div id="benchmark-upload">
@@ -430,24 +404,21 @@ export default function DevSandbox() {
       </div>
       <div id="provider-stuff">
         <div>
-          Register Provider (wallet is 0x followed by 20 hex bytes, example
-          0x00112233445566778899aabbccddeeff00112233)
-          <form action={handleRegister}>
-            <div>
-              <input
-                type="text"
-                id="providerAddress"
-                name="providerAddress"
-                placeholder="Provider Wallet Address"
-                style={{ border: "1px solid black" }}
-              />
-            </div>
-            <div>
-              <button style={{ backgroundColor: "ButtonFace" }} type="submit">
-                Register
-              </button>
-            </div>
-          </form>
+          Register Provider: signs a one-time challenge with the connected
+          wallet to prove ownership
+          <div>
+            <button
+              type="button"
+              style={{ backgroundColor: "ButtonFace" }}
+              disabled={!blockchainClient || registration.step !== "idle"}
+              onClick={handleRegister}
+            >
+              {registration.step === "idle"
+                ? "Verify wallet and register"
+                : `${registration.step}…`}
+            </button>
+            {registration.error ? <div>{registration.error}</div> : null}
+          </div>
         </div>
         <div>
           Current providers:

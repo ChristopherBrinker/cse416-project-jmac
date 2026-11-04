@@ -29,7 +29,7 @@ For the first model, map the backend model record to `HuggingFaceTB/SmolLM2-135M
 
 ## Contract handoff
 
-The registry/escrow owner has supplied the initial contract and ABIs. The contract now defines the settlement flow and 30-minute commit / 15-minute reveal windows. Current integration boundaries:
+The registry/escrow owner has supplied the initial contract and ABIs. The contract now defines the settlement flow and 5-minute commit / 2.5-minute reveal windows (`COMMIT_WINDOW` / `REVEAL_WINDOW` in `contracts/src/Evaluation.sol`). Current integration boundaries:
 
 - M4 result policy: providers agree on a keyed digest of the ordered predicted choice indices plus the correct count; per-item correctness stays in the private result file (schema `3.0.0`). Worker metadata varies across machines and is not part of result agreement.
 - The worker commitment binds chain, contract, job, provider wallet, spec hash and item count, and is salted; the contract `resultCommitment` view and the worker share one test vector. See [docs/m4/protocol.md](../docs/m4/protocol.md). The local JSON file itself is not hashed.
@@ -56,3 +56,13 @@ The registry/escrow owner has supplied the initial contract and ABIs. The contra
 ## Message for the team
 
 > The worker and Docker package are ready for local evaluation, and provider readiness/heartbeats are implemented. Main now has assignments, authorized benchmark downloads, and contract commitments. The opt-in worker now subscribes, downloads, evaluates, and saves results with restart deduplication. It still needs the expected benchmark hash from the backend and backend event synchronization; model mapping currently uses an explicit deployment configuration. The worker now supports opt-in M4 output-digest commitments with durable transaction journals. Reveal/comparison, refunds, payouts, and deadlines now exist in the contract. Worker settlement handles reveal and payment events; creator refunds are available from the dashboard settlement receipt. Live provider authentication is still unverified.
+
+## M4 handoff update
+
+The worker now requires the immutable `specification` object described in [README](README.md#m4-assignment-integrity-interface-proposal-pending-backend-adoption). This is a proposed interface, not an agreement already obtained from teammates.
+
+- Chris: freeze and authorize every field, publish it on subscriptions, mirror byte, item and text limits, confirm backend state for assignment/removal/settlement. Match Unix-second deadlines to the contract, and reject unknown settings.
+- Anthony: resolved. Acceptance now compares a keyed digest of the ordered predictions plus the correct count, under a salted commitment bound to chain, contract, job, provider, spec hash and item count ([docs/m4/protocol.md](../docs/m4/protocol.md)). Funded two-wallet commits/reveals/claims and deadline/refund paths are exercised by `contracts/script/e2e-settlement.sh`.
+- Miguel: confirm receipt display using the same job, wallets and transaction hashes.
+
+Live evidence must record public chain ID/contract, job/provider IDs, assigned wallet addresses, block numbers, tx hashes and receipt status for both commits, both reveals and both claims, plus acceptance and backend/UI state. Never export private journals, signed payloads, keys, secrets, benchmark questions or answer keys. Capture restart checkpoints after persistence, broadcast-before-confirmation, before reveal and before claim; compare logical events and balances to prove no duplicate effects. Also exercise removed assignments, inference failure, unsupported settings, disappearance and refund eligibility. No live evidence is supplied yet.

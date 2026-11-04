@@ -187,6 +187,7 @@ class CommitmentClient:
                 "Saved assignment result is invalid; inspect the results directory"
             )
         assignment = result["assignment"]
+        self._check_assignment_identity(assignment)
         job = self.contract.functions.jobs(assignment["job_id"]).call()
         if not job[5] or not job[3][4] or not job[4][4]:
             return False
@@ -211,6 +212,20 @@ class CommitmentClient:
             self.contract.functions.commitResult(assignment["job_id"], digest),
             digest,
         )
+
+    def _check_assignment_identity(self, assignment: dict) -> None:
+        """A signed assignment specification, when present, must name this chain and contract."""
+        if not assignment.get("specification"):
+            return
+        from .specification import validate_specification
+
+        spec = json.loads(assignment["specification"])
+        validate_specification(spec, eligible=False, supported=False)
+        if (
+            spec["chain_id"] != self.config.chain_id
+            or spec["contract_address"].lower() != self.contract_address.lower()
+        ):
+            raise ValueError("Assignment chain identity mismatch")
 
     def _commitment(
         self, result_path: Path, result: dict, job: list, *, create_salt: bool
@@ -288,6 +303,7 @@ class CommitmentClient:
         from web3.exceptions import TransactionNotFound
 
         assignment = result["assignment"]
+        self._check_assignment_identity(assignment)
         journal_path = result_path.with_suffix(f".{phase}.json")
         identity = {
             "chain_id": self.config.chain_id,
@@ -405,6 +421,16 @@ class CommitmentClient:
         if not is_valid_saved_evaluation(result):
             raise ValueError("Saved assignment result is invalid")
         assignment = result["assignment"]
+        if assignment.get("specification"):
+            from .specification import validate_specification
+
+            spec = json.loads(assignment["specification"])
+            validate_specification(spec, eligible=False, supported=False)
+            if (
+                spec["chain_id"] != self.config.chain_id
+                or spec["contract_address"].lower() != self.contract_address.lower()
+            ):
+                raise ValueError("Assignment chain identity mismatch")
         block = self.web3.eth.get_block("latest")
         job = self.contract.functions.jobs(assignment["job_id"]).call(
             block_identifier=block["number"]

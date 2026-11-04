@@ -1,0 +1,46 @@
+{
+  "source_base": "c2b7f954a05cd52119dec7bf2cd24291ba0cac42",
+  "source_state": "working tree changes; worker_sha256 identifies Python files",
+  "worker_sha256": "1c97411fda747c46f52f20a778159c0d9ea05d7f1f5b09db03b5e4bccbd02bec",
+  "machines_tested": 1,
+  "fresh_cli_processes": 2,
+  "isolated_evaluations": 1,
+  "matching": true,
+  "predictions": [2, 2, 1],
+  "scores": [false, true, true],
+  "agreement_digest": "0x1a9fb0cbe83d1bc81a21cd04ce3e720e27dd4753e461ee6de2deca4f39928f7e",
+  "inference": {
+    "worker_version": "0.4.0",
+    "model_id": "HuggingFaceTB/SmolLM2-135M-Instruct",
+    "model_revision": "12fd25f77366fa6b3b4b768ec3050bf629380bac",
+    "tokenizer_revision": "12fd25f77366fa6b3b4b768ec3050bf629380bac",
+    "method": "choice-index-log-likelihood-v1",
+    "prompt_version": "multiple-choice-index-v1",
+    "device": "cpu",
+    "dtype": "float32",
+    "attention_implementation": "eager",
+    "seed": 0,
+    "threads": 1,
+    "interop_threads": 1,
+    "deterministic_algorithms": true,
+    "max_context_tokens": 2048,
+    "runtime": {
+      "python": "3.12.13",
+      "system": "Darwin",
+      "release": "27.2.0",
+      "machine": "arm64",
+      "packages": {
+        "torch": "2.14.1",
+        "transformers": "5.20.1",
+        "tokenizers": "0.23.3",
+        "safetensors": "0.8.0",
+        "huggingface-hub": "2.2.0",
+        "numpy": "2.5.4"
+      }
+    }
+  },
+  "cpu": "arm",
+  "image_id": null,
+  "integrated_transactions": [],
+  "two_provider_verification": "not performed"
+}

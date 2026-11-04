@@ -17,6 +17,7 @@ from .inference import LocalModelRunner, Question
 from .output import atomic_output
 from .provider_api import ProviderAPIError, ProviderClient, validate_benchmark_origin
 from .scoring import is_valid_saved_evaluation, score_benchmark
+from .specification import validate_specification, verify_content
 
 LOGGER = logging.getLogger(__name__)
 SHUTDOWN_POLL_SECONDS = 0.1
@@ -51,13 +52,17 @@ class Assignment:
     job_id: str
     provider_id: str
     model_id: str
+    specification: str = ""
 
     def identity(self) -> dict[str, str]:
-        return {
+        identity = {
             "job_id": self.job_id,
             "provider_id": self.provider_id,
             "model_id": self.model_id,
         }
+        if self.specification:
+            identity["specification"] = self.specification
+        return identity
 
 
 def parse_assignments(value: object, provider_id: str) -> tuple[Assignment, ...]:
@@ -76,8 +81,14 @@ def parse_assignments(value: object, provider_id: str) -> tuple[Assignment, ...]
             raise ProviderAPIError(
                 "Assignment subscription returned unauthorized work."
             )
+        try:
+            specification = validate_specification(record.get("specification"))
+        except ValueError:
+            raise ProviderAPIError("Assignment specification rejected.") from None
         assignments.append(
-            Assignment(record["jobId"], record["providerId"], record["modelId"])
+            Assignment(
+                record["jobId"], record["providerId"], record["modelId"], specification
+            )
         )
     return tuple(dict.fromkeys(assignments))
 
@@ -120,6 +131,15 @@ def has_saved_result(config: JobConfig, assignment: Assignment) -> bool:
         return False
     try:
         document = json.loads(path.read_bytes())
+        if assignment.specification:
+            spec = json.loads(assignment.specification)
+            validate_specification(spec, eligible=False, supported=False)
+            if (
+                document.get("benchmark", {}).get("content_hash")
+                != spec["benchmark_sha256"]
+                or document.get("total") != spec["item_count"]
+            ):
+                raise ValueError("Saved specification mismatch")
         valid = (
             is_valid_saved_evaluation(document)
             and document.get("assignment") == assignment.identity()
@@ -149,7 +169,10 @@ def saved_assignments(config: JobConfig, provider_id: str) -> tuple[Assignment, 
         ):
             raise ValueError("Saved assignment identity is invalid")
         assignment = Assignment(
-            identity["job_id"], identity["provider_id"], identity["model_id"]
+            identity["job_id"],
+            identity["provider_id"],
+            identity["model_id"],
+            identity.get("specification", ""),
         )
         if result_path(config, assignment) != path:
             raise ValueError("Saved assignment filename does not match its identity")
@@ -166,7 +189,12 @@ def evaluate(content: bytes, runner: LocalModelRunner) -> dict[str, object]:
     questions = [
         Question(item.item_id, item.prompt, item.choices) for item in benchmark.items
     ]
-    document = score_benchmark(benchmark, runner.predict(questions)).to_dict()
+    predictions = (
+        runner.predict_isolated(questions)
+        if isinstance(runner, LocalModelRunner)
+        else runner.predict(questions)
+    )
+    document = score_benchmark(benchmark, predictions).to_dict()
     document["inference"] = runner.metadata()
     return document
 
@@ -232,6 +260,7 @@ async def execute_jobs(
                     )
                     if stop.is_set() or assignment not in latest:
                         continue
+                    verify_content(content, assignment.specification)
                     inference = asyncio.create_task(
                         asyncio.to_thread(evaluate, content, runner)
                     )
@@ -244,6 +273,7 @@ async def execute_jobs(
                         raise
                     if stop.is_set() or assignment not in latest:
                         continue
+                    verify_content(content, assignment.specification)
                     document["assignment"] = assignment.identity()
                     with atomic_output(result_path(config, assignment)) as output:
                         output.write(

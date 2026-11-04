@@ -60,3 +60,4 @@ dev-dist
 
 !.env.schema
 /src/env.ts
+e2e/output/

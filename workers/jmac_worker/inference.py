@@ -79,6 +79,7 @@ class LocalModelRunner:
         self, cache_directory: Path = DEFAULT_CACHE_DIRECTORY, *, offline: bool = False
     ) -> None:
         cache_directory = cache_directory.resolve()
+        self.cache_directory = cache_directory
         os.environ.setdefault("HF_XET_CACHE", str(cache_directory / "xet"))
         try:
             import torch
@@ -114,6 +115,33 @@ class LocalModelRunner:
         self.max_context_tokens = min(
             MAX_CONTEXT_TOKENS, self.model.config.max_position_embeddings
         )
+
+    def predict_isolated(self, questions: Sequence[Question]) -> list[int]:
+        """Terminate stalled native inference, including model loading, after 300s."""
+        import json
+        import subprocess
+        import sys
+        from dataclasses import asdict
+
+        from .specification import MAX_SECONDS
+
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-m", "jmac_worker.isolated"],
+                input=json.dumps(
+                    {
+                        "cache_directory": str(self.cache_directory),
+                        "questions": [asdict(q) for q in questions],
+                    }
+                ),
+                text=True,
+                capture_output=True,
+                timeout=MAX_SECONDS,
+                check=True,
+            )
+            return json.loads(completed.stdout)
+        except (subprocess.SubprocessError, ValueError):
+            raise RuntimeError("isolated_inference_failed") from None
 
     def predict(self, questions: Sequence[Question]) -> list[int]:
         import torch
