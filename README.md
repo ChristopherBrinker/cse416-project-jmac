@@ -1,6 +1,6 @@
 # JMAC — Private AI Benchmarking
 
-JMAC is our CSE 416 project for private AI benchmarking. The repository provides the web application, authentication, benchmark uploads, a scheduler for funded jobs, and a Docker-packaged Python benchmark evaluator with provider readiness and heartbeats. The Evaluation contract supports funding, provider assignment, and result-hash commitments; reveal, result comparison, refunds, and payouts are not implemented yet. The worker does not yet fetch assignments or call the contract. See the [worker guide](workers/README.md) for pinned local model inference, provider setup, scoring, and repeatability checks.
+JMAC is our CSE 416 project for private AI benchmarking. The repository provides the web application, authentication, benchmark uploads, a scheduler for funded jobs, and a Docker-packaged Python benchmark evaluator with provider readiness and heartbeats. The Evaluation contract supports funding, provider assignment, bound and salted result commitments, reveal and agreement checking, provider payouts, and creator refunds after disagreement or a deadline; workers fetch assignments and settle on-chain. What an accepted result proves is defined in [docs/m4/protocol.md](docs/m4/protocol.md). See the [worker guide](workers/README.md) for pinned local model inference, provider setup, scoring, and repeatability checks.
 
 The application uses Next.js App Router and TypeScript, Convex for the backend, and Better Auth for email/password authentication through the supported Convex component. Bun workspaces and Turborepo manage the monorepo; Ultracite with Oxlint/Oxfmt and Lefthook handle code checks.
 
@@ -29,11 +29,10 @@ forge script script/Deploy.s.sol --broadcast --rpc-url $RPC_URL --private-key $P
 
 Note the contract address output by `script`.
 
-`build` will produce an ABI file `out/Evaluation.sol/Evaluation.json`. This ABI is required by the frontend and scheduler to call the contract's functions, and must be copied to their respective holding places. From the repository root, run:
+`build` will produce an ABI file `out/Evaluation.sol/Evaluation.json`. The frontend, scheduler and worker each keep a copy. After any contract interface change, regenerate all three from the repository root (CI fails if they drift):
 
 ```sh
-cp contracts/out/Evaluation.sol/Evaluation.json packages/scheduler/abi.json
-cp contracts/out/Evaluation.sol/Evaluation.json apps/web/public/abi.json
+bun contracts/script/sync-abi.ts
 ```
 
 Next is to configure the enviornment variables for the scheduler. Go to `packages/scheduler`, create `.env` and in it add:
@@ -147,7 +146,7 @@ The dashboard checks Better Auth authentication on the server and waits for Conv
 
 ## CI and verification
 
-GitHub Actions uses Bun 1.4.0 and frozen installs to run lint, formatting, and TypeScript checks. A separate build job requires repository Actions secrets `NEXT_PUBLIC_CONVEX_URL` and `NEXT_PUBLIC_CONVEX_SITE_URL`. A maintainer enables it with repository variable `INTEGRATION_BUILD_ENABLED=true`. The workflow does not deploy Convex.
+GitHub Actions uses Bun 1.4.0 and frozen installs to run lint, formatting, and TypeScript checks. The `contracts` job runs `forge fmt --check`, `forge test`, the ABI drift check, and the Anvil settlement run (`contracts/script/e2e-settlement.sh`, uploaded as the `settlement-evidence` artifact). The `workers` job runs ruff and the full worker unittest suite. Settlement policy and the acceptance matrix are in [docs/m4](docs/m4/protocol.md). A separate build job requires repository Actions secrets `NEXT_PUBLIC_CONVEX_URL` and `NEXT_PUBLIC_CONVEX_SITE_URL`. A maintainer enables it with repository variable `INTEGRATION_BUILD_ENABLED=true`. The workflow does not deploy Convex.
 
 Static checks run without account credentials. Production builds, deployment-aware Convex code generation, and live authentication checks require a configured Convex deployment and environment values.
 
