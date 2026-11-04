@@ -39,6 +39,7 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "playwright-core": "1.56.1",
     "tailwindcss": "catalog:",
     "typescript": "catalog:"
   }
