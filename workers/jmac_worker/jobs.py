@@ -187,7 +187,12 @@ def evaluate(content: bytes, runner: LocalModelRunner) -> dict[str, object]:
     questions = [
         Question(item.item_id, item.prompt, item.choices) for item in benchmark.items
     ]
-    document = score_benchmark(benchmark, runner.predict(questions)).to_dict()
+    predictions = (
+        runner.predict_isolated(questions)
+        if isinstance(runner, LocalModelRunner)
+        else runner.predict(questions)
+    )
+    document = score_benchmark(benchmark, predictions).to_dict()
     document["inference"] = runner.metadata()
     return document
 

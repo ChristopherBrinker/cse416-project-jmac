@@ -1,6 +1,8 @@
 """Integrity boundaries independent of backend, chain, or model availability."""
 
 import json
+import subprocess
+import sys
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -9,6 +11,7 @@ from unittest.mock import patch
 from test_jobs import ASSIGNMENT, BENCHMARK, RECORD
 
 from jmac_worker.benchmark import parse_benchmark
+from jmac_worker.inference import LocalModelRunner
 from jmac_worker.jobs import JobConfig, parse_assignments, result_path
 from jmac_worker.provider_api import ProviderAPIError
 from jmac_worker.specification import validate_specification, verify_content
@@ -63,3 +66,19 @@ class IntegrityTests(unittest.TestCase):
         self.assertNotEqual(
             result_path(config, ASSIGNMENT), result_path(config, changed)
         )
+
+    def test_stalled_child_is_killed_and_error_is_safe(self):
+        runner = object.__new__(LocalModelRunner)
+        runner.cache_directory = Path("unused")
+        real_run = subprocess.run
+
+        def stalled(*args, **kwargs):
+            return real_run(
+                [sys.executable, "-c", "import time; time.sleep(10)"],
+                timeout=0.05,
+                capture_output=True,
+            )
+
+        with patch("subprocess.run", side_effect=stalled):
+            with self.assertRaisesRegex(RuntimeError, "^isolated_inference_failed$"):
+                runner.predict_isolated([])
