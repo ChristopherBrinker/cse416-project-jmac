@@ -39,6 +39,7 @@ import { useState } from "react";
 import type { EvaluationJob, JobFilter } from "@/lib/evaluations";
 import {
   formatDateTime,
+  formatScore,
   formatWei,
   matchesFilter,
   truncateHash,
@@ -208,7 +209,7 @@ export function JobsPanel({
                         <JobStatusBadge status={job.status} />
                       </TableCell>
                       <TableCell className="tabular-nums">
-                        {job.score ?? "—"}
+                        {formatScore(job.score)}
                       </TableCell>
                       <TableCell className="pr-4 whitespace-nowrap tabular-nums">
                         {formatWei(job.price)}
@@ -245,7 +246,7 @@ export function JobsPanel({
                   </span>
                   <span className="text-muted-foreground flex flex-wrap justify-between gap-2">
                     <span>
-                      {formatWei(job.price)} · Score {job.score ?? "—"}
+                      {formatWei(job.price)} · Score {formatScore(job.score)}
                     </span>
                     <span>{formatDateTime(job._creationTime)}</span>
                   </span>

@@ -37,5 +37,11 @@ export const formatDateTime = (value: number): string =>
   `${dateTimeFormatter.format(new Date(value))} UTC`;
 export const formatWei = (value: bigint): string =>
   `${value.toLocaleString("en-US")} wei`;
+const scoreFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 1,
+});
+
+export const formatScore = (score: number | undefined): string =>
+  score === undefined ? "—" : `${scoreFormatter.format(score)}%`;
 export const truncateHash = (hash: string): string =>
   hash.length <= 16 ? hash : `${hash.slice(0, 8)}…${hash.slice(-6)}`;
