@@ -29,7 +29,7 @@ For the first model, map the backend model record to `HuggingFaceTB/SmolLM2-135M
 
 ## Contract handoff
 
-The registry/escrow owner has supplied the initial contract and ABIs. The contract now defines the settlement flow and 30-minute commit / 15-minute reveal windows. Current integration boundaries:
+The registry/escrow owner has supplied the initial contract and ABIs. The contract now defines the settlement flow and 5-minute commit / 2.5-minute reveal windows (`COMMIT_WINDOW` / `REVEAL_WINDOW` in `contracts/src/Evaluation.sol`). Current integration boundaries:
 
 - The requested contract result is the ordered boolean score vector (`[true, false, ...]`). The worker writes this boolean array directly in result schema `2.0.0`, with one correctness value per benchmark item; predictions remain integer choice indices. Worker metadata varies across machines and should not accidentally become part of result agreement.
 - The implemented worker encoding is `keccak256(abi.encode(bool[] scores))` with no salt or additional binding, matching the requested hash of scores. The current contract stores arbitrary nonzero bytes32 values. The reveal implementation verifies exactly this encoding. The local JSON file itself is not hashed.
