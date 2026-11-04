@@ -12,8 +12,11 @@ import { useConvexAuth, usePaginatedQuery, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { contractAddress, getJobFundingStatus } from "@/lib/blockchain";
-import type { BlockchainClient } from "@/lib/blockchain";
+import {
+  getJobFundingStatus,
+  waitForTransactionSuccess,
+  writeJobTransaction,
+} from "@/lib/blockchain";
 import type { Benchmark, EvaluationJob } from "@/lib/evaluations";
 import { getErrorMessage } from "@/lib/evaluations";
 
@@ -25,6 +28,7 @@ import { JobsPanel } from "./jobs-panel";
 import { NewEvaluationDialog } from "./new-evaluation-dialog";
 import { ProvidersPanel } from "./providers-panel";
 import { StatsOverview } from "./stats-overview";
+import { useBlockchainWallet } from "./use-blockchain-wallet";
 import { WalletDialog } from "./wallet-dialog";
 
 const STACKED_LAYOUT_QUERY = "(max-width: 1023px)";
@@ -42,7 +46,8 @@ function LiveDashboard() {
   );
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [section, setSection] = useState("evaluations");
-  const [blockchainClient, setBlockchainClient] = useState<BlockchainClient>();
+  const walletState = useBlockchainWallet();
+  const { wallet } = walletState;
   const [fundingJobId, setFundingJobId] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<
     Record<string, FundingTransaction | undefined>
@@ -129,31 +134,23 @@ function LiveDashboard() {
         toast.info(
           "This job is already funded on-chain. Waiting for the scheduler to update it."
         );
-      } else if (blockchainClient && fundingStatuses[job._id] === "unfunded") {
+      } else if (wallet && fundingStatuses[job._id] === "unfunded") {
         let hash = transactions[job._id]?.hash;
         if (!hash) {
-          const { request } =
-            await blockchainClient.publicClient.simulateContract({
-              account: blockchainClient.account,
-              address: contractAddress,
-              abi: blockchainClient.abi,
-              functionName: "fundJob",
-              args: [String(job._id)],
-              value: job.price,
-            });
-          const submittedHash =
-            await blockchainClient.walletClient.writeContract(request);
+          const submittedHash = await writeJobTransaction(
+            wallet,
+            "fundJob",
+            job._id,
+            job.price
+          );
           hash = submittedHash;
           setTransactions((current) => ({
             ...current,
             [job._id]: { hash: submittedHash, confirmed: false },
           }));
         }
-        const receipt =
-          await blockchainClient.publicClient.waitForTransactionReceipt({
-            hash,
-          });
-        if (receipt.status === "success") {
+        const succeeded = await waitForTransactionSuccess(hash);
+        if (succeeded) {
           setFundingStatuses((current) => ({
             ...current,
             [job._id]: "funded",
@@ -193,9 +190,7 @@ function LiveDashboard() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <WalletDialog
-            client={blockchainClient}
-            onConnect={setBlockchainClient}
-            onDisconnect={() => setBlockchainClient(undefined)}
+            walletState={walletState}
             busy={fundingJobId !== null}
           />
           <BenchmarkUploadDialog />
@@ -238,7 +233,7 @@ function LiveDashboard() {
               {selectedJob ? (
                 <JobDetail
                   job={selectedJob}
-                  walletConnected={Boolean(blockchainClient)}
+                  walletConnected={Boolean(wallet)}
                   funding={fundingJobId === selectedJob._id}
                   fundingBusy={fundingJobId !== null}
                   fundingStatus={fundingStatuses[selectedJob._id] ?? "checking"}

@@ -6,8 +6,12 @@ import { useQuery, useMutation, usePaginatedQuery } from "convex/react";
 import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
-import { contractAddress, createBlockchainClient } from "@/lib/blockchain";
-import type { BlockchainClient } from "@/lib/blockchain";
+import {
+  createPrivateKeyWallet,
+  waitForTransactionSuccess,
+  writeJobTransaction,
+} from "@/lib/blockchain";
+import type { BlockchainWallet } from "@/lib/blockchain";
 
 const handleSubmit = async (formData: FormData) => {
   let token;
@@ -52,7 +56,7 @@ const handleSubmit = async (formData: FormData) => {
 
 export default function DevSandbox() {
   const [blockchainClient, setBlockchainClient] = useState<
-    BlockchainClient | undefined
+    BlockchainWallet | undefined
   >();
 
   const [searchBenchmarkName, setSearchBenchmarkName] = useState<
@@ -97,7 +101,7 @@ export default function DevSandbox() {
     const privateKey = String(formData.get("privateKey"));
     if (privateKey && privateKey.slice(0, 2) === "0x") {
       const pk = privateKey as `0x${string}`;
-      setBlockchainClient(await createBlockchainClient(pk));
+      setBlockchainClient(await createPrivateKeyWallet(pk));
       alert("Connected successfully");
     } else {
       alert("Invalid private key");
@@ -107,17 +111,13 @@ export default function DevSandbox() {
   const fundJob = async (jobId: Id<"jobs">) => {
     if (blockchainClient) {
       try {
-        const { request } =
-          await blockchainClient.publicClient.simulateContract({
-            account: blockchainClient.account,
-            address: contractAddress,
-            abi: blockchainClient.abi,
-            functionName: "fundJob",
-            args: [String(jobId)],
-            value: 2500n,
-          });
-        const hash = await blockchainClient.walletClient.writeContract(request);
-        await blockchainClient.publicClient.waitForTransactionReceipt({ hash });
+        const hash = await writeJobTransaction(
+          blockchainClient,
+          "fundJob",
+          jobId,
+          2500n
+        );
+        await waitForTransactionSuccess(hash);
         alert("success");
       } catch (error) {
         console.log(error);
