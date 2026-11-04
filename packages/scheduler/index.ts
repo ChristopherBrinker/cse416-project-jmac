@@ -105,6 +105,7 @@ async function main() {
 
             // Determine state of each provider
             try {
+              // [A_id_defined, A_did_commit, A_did_reveal, B_id_defined, B_did_commit, B_did_reveal]
               const providerStates = (await publicClient.readContract({
                 address: CONTRACT_ADDRESS,
                 abi,
@@ -112,13 +113,27 @@ async function main() {
                 args: [id],
               })) as boolean[];
 
-              const commitComplete = providerStates[0] && providerStates[2];
-              if (commitComplete) {
-                endStateA = providerStates[1] ? "submitted" : "reveal_timeout";
-                endStateB = providerStates[3] ? "submitted" : "reveal_timeout";
+              const wasAssigned = providerStates[0] && providerStates[3];
+              if (wasAssigned) {
+                const commitComplete = providerStates[1] && providerStates[4];
+                if (commitComplete) {
+                  endStateA = providerStates[2]
+                    ? "submitted"
+                    : "reveal_timeout";
+                  endStateB = providerStates[5]
+                    ? "submitted"
+                    : "reveal_timeout";
+                } else {
+                  endStateA = providerStates[1]
+                    ? "submitted"
+                    : "commit_timeout";
+                  endStateB = providerStates[4]
+                    ? "submitted"
+                    : "commit_timeout";
+                }
               } else {
-                endStateA = providerStates[0] ? "submitted" : "commit_timeout";
-                endStateB = providerStates[2] ? "submitted" : "commit_timeout";
+                endStateA = "assignment_failed";
+                endStateB = "assignment_failed";
               }
             } catch {
               console.log(`Failed to get job ${id} from blockchain`);
@@ -158,6 +173,7 @@ async function main() {
   async function assignProviders(
     jobId: Id<"jobs">,
     price: bigint,
+    jobFunded_tx: string,
     retry: boolean
   ) {
     const providerAssignment = await convexClient.mutation(
@@ -165,6 +181,7 @@ async function main() {
       {
         jobId,
         price,
+        jobFunded_tx,
         retry,
         backendKey: BACKEND_CONVEX_KEY,
       }
@@ -213,11 +230,21 @@ async function main() {
             const jobId = decoded.args.jobId as Id<"jobs">;
             const price = decoded.args.price as bigint;
 
-            const result = await assignProviders(jobId, price, false);
+            const result = await assignProviders(
+              jobId,
+              price,
+              log.transactionHash,
+              false
+            );
             if (!result.success && result.error === "Providers unavailable") {
               setTimeout(async () => {
                 try {
-                  await assignProviders(jobId, price, true);
+                  await assignProviders(
+                    jobId,
+                    price,
+                    log.transactionHash,
+                    true
+                  );
                 } catch {
                   /* */
                 }
@@ -232,6 +259,7 @@ async function main() {
                 status: "failed",
                 endStateA: "disagreement",
                 endStateB: "disagreement",
+                tx: log.transactionHash,
                 backendKey: BACKEND_CONVEX_KEY,
               }
             );
@@ -262,6 +290,7 @@ async function main() {
                 score,
                 endStateA: "succeeded",
                 endStateB: "succeeded",
+                tx: log.transactionHash,
                 backendKey: BACKEND_CONVEX_KEY,
               }
             );

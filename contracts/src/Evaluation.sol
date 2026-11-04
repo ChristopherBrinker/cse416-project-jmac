@@ -31,8 +31,8 @@ struct Provider {
 }
 
 contract Evaluation {
-    uint256 public constant COMMIT_WINDOW = 30 minutes;
-    uint256 public constant REVEAL_WINDOW = 15 minutes;
+    uint256 public constant COMMIT_WINDOW = 5 minutes;
+    uint256 public constant REVEAL_WINDOW = 2.5 minutes;
 
     mapping(string => Job) public jobs;
 
@@ -201,16 +201,21 @@ contract Evaluation {
         revert("Unauthorized");
     }
 
-    // Used by scheduler after timeout to determine who timed out and in what stage
-    // Returns [A_did_commit, A_did_reveal, B_did_commit, B_did_reveal]
+    // Used by scheduler after timeout to determine what the reason for timeout was
+    // Returns [A_id_defined, A_did_commit, A_did_reveal, B_id_defined, B_did_commit, B_did_reveal]
     function getProviderStates(string memory jobId) public view returns (bool[] memory) {
         Job memory j = jobs[jobId];
         require(j.flag, "Job not found");
-        bool[] memory ret = new bool[](4);
-        ret[0] = j.providerA.commit != bytes32(0);
-        ret[1] = j.providerA.revealed;
-        ret[2] = j.providerB.commit != bytes32(0);
-        ret[3] = j.providerB.revealed;
+        bool[] memory ret = new bool[](6);
+
+        ret[0] = bytes(j.providerA.id).length > 0;
+        ret[1] = j.providerA.commit != bytes32(0);
+        ret[2] = j.providerA.revealed;
+
+        ret[3] = bytes(j.providerB.id).length > 0;
+        ret[4] = j.providerB.commit != bytes32(0);
+        ret[5] = j.providerB.revealed;
+
         return ret;
     }
 }

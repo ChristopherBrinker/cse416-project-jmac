@@ -61,6 +61,7 @@ export const assignProviders = mutation({
   args: {
     jobId: v.id("jobs"),
     price: v.int64(),
+    jobFunded_tx: v.string(),
     retry: v.boolean(),
     backendKey: v.string(),
   },
@@ -88,6 +89,7 @@ export const assignProviders = mutation({
     await ctx.db.patch("jobs", job._id, {
       status: "funded",
       statusTime: Date.now(),
+      jobFunded_tx: args.jobFunded_tx,
     });
 
     // This will be turned into a sensible algorithm later
@@ -139,6 +141,7 @@ export const setStatus = mutation({
     score: v.optional(v.number()),
     endStateA: v.optional(v.string()),
     endStateB: v.optional(v.string()),
+    tx: v.optional(v.string()),
     backendKey: v.string(),
   },
   handler: async (ctx, args) => {
@@ -169,9 +172,17 @@ export const setStatus = mutation({
     }
 
     if (args.status === "failed") {
+      let failureReason = "Timed out";
+      if (args.endStateA === "disagreement") {
+        failureReason = "Providers disagreed on results";
+      } else if (args.endStateA === "assignment_failed") {
+        failureReason = "Provider assignment failed";
+      }
       await ctx.db.patch("jobs", job._id, {
         status: args.status,
         statusTime: Date.now(),
+        jobFailed_tx: args.tx,
+        failureReason,
       });
     } else if (args.status === "succeeded") {
       if (
@@ -190,6 +201,7 @@ export const setStatus = mutation({
         status: args.status,
         statusTime: Date.now(),
         score: args.score,
+        jobComplete_tx: args.tx,
       });
     }
 
@@ -269,3 +281,33 @@ export const getTimedOutJobs = query({
     return { success: true, jobIds };
   },
 });
+
+/*export const setTx = mutation({
+  args: { jobId: v.id("jobs"), tx_hash: v.string(), tx_type: v.string(), backendKey: v.string() },
+  handler: async (ctx, args) => {
+    if (!process.env.BACKEND_CONVEX_KEY) {
+      throw new Error("BACKEND_CONVEX_KEY not set in convex");
+    }
+    if (args.backendKey !== process.env.BACKEND_CONVEX_KEY) {
+      return { success: false, error: "Invalid key" };
+    }
+    
+    const valid_tx_types = ["jobFunded", "jobFailed", "jobComplete"];
+
+    if (!valid_tx_types.includes(args.tx_type)) {
+      return {
+        success: false,
+        error: "Invalid tx type. Must be 'jobFunded', 'jobFailed', or 'jobComplete'",
+      };
+    }
+
+    const tx_field = args.tx_type + "_tx";
+
+    const job = await ctx.db.get("jobs", args.jobId);
+    if (!job) {
+      return { success: false, error: "Job not found" };
+    }
+
+    await ctx.db.patch("jobs", job._id, {[tx_field]: args.tx_hash});
+  }
+})*/

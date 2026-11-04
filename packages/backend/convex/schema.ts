@@ -33,6 +33,16 @@ export default defineSchema({
     status: v.string(),
     statusTime: v.number(),
     score: v.optional(v.number()),
+    jobFunded_tx: v.optional(v.string()),
+    jobFailed_tx: v.optional(v.string()),
+    jobComplete_tx: v.optional(v.string()),
+    /* failure reason:
+      "Timed out": one or both of the providers timed out during commit or reveal
+      "Providers disagreed on results"
+      "Provider assignment failed": assign providers failed (either convex assignment or call to blockchain)
+      undefined: other errors
+    */
+    failureReason: v.optional(v.string()),
   })
     .index("by_creatorId", ["creatorId"])
     .index("by_status_statusTime", ["status", "statusTime"]),
@@ -42,6 +52,13 @@ export default defineSchema({
     providerId: v.id("providers"),
     modelId: v.id("models"),
     finished: v.boolean(),
+    /* End state:
+      assignment_failed: backend assigned but scheduler failed to call blockchain
+      commit_timeout: provider did not commit
+      reveal_timeout: both providers committed, provider did not reveal
+      submitted: sent a commit/reveal while the other timed out
+      disagreement: both revealed, results mismatched
+    */
     endState: v.optional(v.string()),
   })
     .index("by_providerId_finished", ["providerId", "finished"])
