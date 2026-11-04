@@ -38,7 +38,7 @@ function SelectedJobDetail({
   walletState: BlockchainWalletState;
   actions: ReturnType<typeof useJobActions>;
 }) {
-  const chainQuery = useOnChainJob(job._id);
+  const chainQuery = useOnChainJob(job._id, job.status);
   const transactions = actions.transactions[job._id];
   const lifecycle = getJobLifecycle({
     convexStatus: job.status,

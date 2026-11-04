@@ -1,20 +1,31 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { WaitForTransactionReceiptTimeoutError } from "viem";
 import type { Hash } from "viem";
 
 import {
   describeWalletError,
   getOnChainJob,
+  getTransactionOutcome,
   isSameAddress,
   waitForTransactionSuccess,
   writeJobTransaction,
 } from "@/lib/blockchain";
 import type { BlockchainWallet, OnChainJob } from "@/lib/blockchain";
 import type { EvaluationJob } from "@/lib/evaluations";
-import { getJobLifecycle, isSettledOnChain } from "@/lib/job-lifecycle";
+import {
+  getJobLifecycle,
+  hasTimedOut,
+  isSettledOnChain,
+} from "@/lib/job-lifecycle";
+import {
+  forgetPendingTransaction,
+  loadPendingTransactions,
+  rememberPendingTransaction,
+} from "@/lib/pending-transactions";
 
 const CHAIN_POLL_INTERVAL_MS = 4000;
 
@@ -32,14 +43,30 @@ type TransactionKind = keyof JobTransactions;
 
 const onChainJobKey = (jobId: string | null) => ["onChainJob", jobId] as const;
 
-/** Polls the contract for a job until its on-chain state is final. */
-export function useOnChainJob(jobId: string | null) {
+/**
+ * Only jobs that providers or the scheduler can still move need polling:
+ * open escrow before its deadline, and completed jobs awaiting claims.
+ * Unfunded, failed, and expired jobs change only through the creator's own
+ * funding/refund (refreshed explicitly), a Convex status change (part of
+ * the query key), or another tab (refetched on window focus).
+ */
+const needsPolling = (chainJob: OnChainJob | undefined): boolean => {
+  if (!chainJob) {
+    return true;
+  }
+  if (chainJob.status === "open") {
+    return chainJob.funded && !hasTimedOut(chainJob);
+  }
+  return chainJob.status === "complete" && !isSettledOnChain(chainJob);
+};
+
+export function useOnChainJob(jobId: string | null, convexStatus: string) {
   return useQuery({
-    queryKey: onChainJobKey(jobId),
+    queryKey: [...onChainJobKey(jobId), convexStatus],
     queryFn: () => getOnChainJob(jobId ?? ""),
     enabled: jobId !== null,
     refetchInterval: (query) =>
-      isSettledOnChain(query.state.data) ? false : CHAIN_POLL_INTERVAL_MS,
+      needsPolling(query.state.data) ? CHAIN_POLL_INTERVAL_MS : false,
     retry: 1,
   });
 }
@@ -97,9 +124,63 @@ export function useJobActions(wallet: BlockchainWallet | undefined) {
 
   const refreshChainJob = async (jobId: string): Promise<OnChainJob> => {
     const chainJob = await getOnChainJob(jobId);
-    queryClient.setQueryData(onChainJobKey(jobId), chainJob);
+    // Update every cached variant (the key also carries the Convex status)
+    queryClient.setQueriesData({ queryKey: onChainJobKey(jobId) }, chainJob);
     return chainJob;
   };
+
+  // After a reload, restore submitted-but-unconfirmed transactions and
+  // settle any that were mined while the page was closed.
+  useEffect(() => {
+    let active = true;
+    const reconcile = async () => {
+      const stored = Object.entries(loadPendingTransactions()).flatMap(
+        ([jobId, kinds]) =>
+          (["funding", "refund"] as const).flatMap((kind) => {
+            const hash = kinds[kind];
+            return hash ? [{ jobId, kind, hash }] : [];
+          })
+      );
+      if (!active || stored.length === 0) {
+        return;
+      }
+      setTransactions((current) => {
+        const next = { ...current };
+        for (const { jobId, kind, hash } of stored) {
+          next[jobId] = { ...next[jobId], [kind]: { hash, confirmed: false } };
+        }
+        return next;
+      });
+      await Promise.all(
+        stored.map(async ({ jobId, kind, hash }) => {
+          try {
+            const outcome = await getTransactionOutcome(hash);
+            if (!active || outcome === "unknown") {
+              return;
+            }
+            forgetPendingTransaction(jobId, kind);
+            setTransactions((current) => ({
+              ...current,
+              [jobId]: {
+                ...current[jobId],
+                [kind]:
+                  outcome === "success" ? { hash, confirmed: true } : undefined,
+              },
+            }));
+            await queryClient.invalidateQueries({
+              queryKey: onChainJobKey(jobId),
+            });
+          } catch {
+            // Leave it pending; the action resumes waiting on click
+          }
+        })
+      );
+    };
+    void reconcile();
+    return () => {
+      active = false;
+    };
+  }, [queryClient]);
 
   const submit = async (
     jobId: string,
@@ -111,9 +192,25 @@ export function useJobActions(wallet: BlockchainWallet | undefined) {
     if (!hash) {
       const submittedHash = await send();
       hash = submittedHash;
+      rememberPendingTransaction(jobId, kind, submittedHash);
       setTransaction(jobId, kind, { hash: submittedHash, confirmed: false });
     }
-    const succeeded = await waitForTransactionSuccess(hash);
+    let succeeded: boolean;
+    try {
+      succeeded = await waitForTransactionSuccess(hash);
+    } catch (error) {
+      if (error instanceof WaitForTransactionReceiptTimeoutError) {
+        // Never mined (e.g. dropped, or the chain was reset): allow a retry
+        forgetPendingTransaction(jobId, kind);
+        setTransaction(jobId, kind, undefined);
+        throw new Error(
+          "The transaction was not confirmed in time and may have been dropped. Check your wallet's activity, then try again.",
+          { cause: error }
+        );
+      }
+      throw error;
+    }
+    forgetPendingTransaction(jobId, kind);
     setTransaction(
       jobId,
       kind,
