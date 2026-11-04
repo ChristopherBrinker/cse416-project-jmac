@@ -1,6 +1,19 @@
 [
   {
     "type": "function",
+    "name": "REVEAL_WINDOW",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "claimPayment",
     "inputs": [
       {
@@ -77,9 +90,9 @@
             "internalType": "bytes32"
           },
           {
-            "name": "result",
-            "type": "bool[]",
-            "internalType": "bool[]"
+            "name": "outputDigest",
+            "type": "bytes32",
+            "internalType": "bytes32"
           },
           {
             "name": "flag",
@@ -95,6 +108,11 @@
             "name": "claimed",
             "type": "bool",
             "internalType": "bool"
+          },
+          {
+            "name": "correctCount",
+            "type": "uint256",
+            "internalType": "uint256"
           }
         ]
       },
@@ -119,9 +137,9 @@
             "internalType": "bytes32"
           },
           {
-            "name": "result",
-            "type": "bool[]",
-            "internalType": "bool[]"
+            "name": "outputDigest",
+            "type": "bytes32",
+            "internalType": "bytes32"
           },
           {
             "name": "flag",
@@ -137,6 +155,11 @@
             "name": "claimed",
             "type": "bool",
             "internalType": "bool"
+          },
+          {
+            "name": "correctCount",
+            "type": "uint256",
+            "internalType": "uint256"
           }
         ]
       },
@@ -154,6 +177,16 @@
         "name": "commitDeadline",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "specHash",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "itemCount",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -168,9 +201,19 @@
         "internalType": "string"
       },
       {
-        "name": "scores",
-        "type": "bool[]",
-        "internalType": "bool[]"
+        "name": "outputDigest",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "correctCount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "outputs": [],
@@ -200,25 +243,30 @@
         "internalType": "string"
       },
       {
-        "name": "scores",
-        "type": "bool[]",
+        "name": "specHash",
+        "type": "bytes32",
         "indexed": false,
-        "internalType": "bool[]"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "function",
-    "name": "REVEAL_WINDOW",
-    "inputs": [],
-    "outputs": [
+        "internalType": "bytes32"
+      },
       {
-        "name": "",
+        "name": "outputDigest",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "correctCount",
         "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "itemCount",
+        "type": "uint256",
+        "indexed": false,
         "internalType": "uint256"
       }
     ],
-    "stateMutability": "view"
+    "anonymous": false
   }
 ]
