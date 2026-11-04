@@ -75,6 +75,9 @@ Internal functions; they cannot be called from a browser. Run them with deployme
 
 - `admin:addModel` - `bunx convex run admin:addModel '{"name": "SmolLM2-135M-Instruct"}'` adds a model record
 - `admin:approveProvider` - `bunx convex run admin:approveProvider '{"providerId": "<id>"}'` approves a provider; refuses providers whose wallet was never verified with a signed challenge
+- `admin:normalizeProviderWallets` - `bunx convex run admin:normalizeProviderWallets` checksums wallet addresses stored before signed registration so uniqueness checks ignore casing; rerun with the returned `cursor` until `done` is true
+
+`admin:addModel` is idempotent: rerunning it with an existing name returns that model's ID. A legacy unapproved provider registered with a typed (unverified) address is replaced automatically when its owner completes signed registration, since it could never be approved.
 
 ### provider
 

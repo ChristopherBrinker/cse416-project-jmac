@@ -1,7 +1,9 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
+import type { Id } from "./_generated/dataModel";
 import { query, mutation } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import {
   buildChallengeMessage,
   checkChallengeUsable,
@@ -71,6 +73,45 @@ export const createWalletChallenge = mutation({
   },
 });
 
+const MAX_PENDING_PROVIDERS = 20;
+
+/**
+ * Stored addresses are checksummed, but legacy rows may be lowercase or
+ * arbitrarily cased; `admin:normalizeProviderWallets` canonicalizes those.
+ * Checking both common forms keeps uniqueness case-insensitive meanwhile.
+ */
+const isWalletRegistered = async (
+  ctx: MutationCtx,
+  checksummed: string
+): Promise<boolean> => {
+  const forms = [...new Set([checksummed, checksummed.toLowerCase()])];
+  const matches = await Promise.all(
+    forms.map((walletAddress) =>
+      ctx.db
+        .query("providers")
+        .withIndex("by_walletAddress", (q) =>
+          q.eq("walletAddress", walletAddress)
+        )
+        .first()
+    )
+  );
+  return matches.some((match) => match !== null);
+};
+
+const removeProvider = async (
+  ctx: MutationCtx,
+  providerId: Id<"providers">
+) => {
+  const support = await ctx.db
+    .query("model_support")
+    .withIndex("by_providerId", (q) => q.eq("providerId", providerId))
+    .take(MAX_PENDING_PROVIDERS);
+  await Promise.all(
+    support.map((row) => ctx.db.delete("model_support", row._id))
+  );
+  await ctx.db.delete("providers", providerId);
+};
+
 export const register = mutation({
   args: {
     challengeId: v.id("wallet_challenges"),
@@ -102,26 +143,30 @@ export const register = mutation({
       return { success: false, error: verified.error };
     }
 
-    const walletInUse = await ctx.db
+    // Legacy providers registered with a typed, unverified address can never
+    // be approved, so a signed registration replaces them instead of being
+    // blocked by them (they have no assignments: they were never approved).
+    const unapproved = await ctx.db
       .query("providers")
-      .withIndex("by_walletAddress", (q) =>
-        q.eq("walletAddress", challenge.walletAddress)
+      .withIndex("by_userId_approved", (q) =>
+        q.eq("userId", identity.subject).eq("approved", false)
       )
-      .first();
-    if (walletInUse) {
+      .take(MAX_PENDING_PROVIDERS);
+    const legacy = unapproved.filter(
+      (provider) => provider.walletVerifiedAt === undefined
+    );
+    await Promise.all(
+      legacy.map((provider) => removeProvider(ctx, provider._id))
+    );
+
+    if (await isWalletRegistered(ctx, challenge.walletAddress)) {
       return {
         success: false,
         error: "This wallet is already registered to a provider",
       };
     }
 
-    const existing = await ctx.db
-      .query("providers")
-      .withIndex("by_userId_approved", (q) =>
-        q.eq("userId", identity.subject).eq("approved", false)
-      )
-      .first();
-    if (existing) {
+    if (unapproved.length > legacy.length) {
       return {
         success: false,
         error: "Cannot make more providers until existing ones are approved",

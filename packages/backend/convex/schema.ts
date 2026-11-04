@@ -20,10 +20,12 @@ export default defineSchema({
 
   models: defineTable({
     name: v.string(),
-  }).searchIndex("search_name", {
-    searchField: "name",
-    staged: false,
-  }),
+  })
+    .index("by_name", ["name"])
+    .searchIndex("search_name", {
+      searchField: "name",
+      staged: false,
+    }),
 
   jobs: defineTable({
     creatorId: v.string(),
