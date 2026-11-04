@@ -8,7 +8,7 @@ import { foundry } from "viem/chains";
 export const contractAddress = process.env
   .NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
 
-const createBlockchainReader = async () => {
+export const createBlockchainReader = async () => {
   if (
     !process.env.NEXT_PUBLIC_NET_URL ||
     !/^0x[\da-fA-F]{40}$/u.test(contractAddress ?? "")

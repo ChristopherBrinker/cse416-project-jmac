@@ -238,6 +238,7 @@ function LiveDashboard() {
               {selectedJob ? (
                 <JobDetail
                   job={selectedJob}
+                  blockchainClient={blockchainClient}
                   walletConnected={Boolean(blockchainClient)}
                   funding={fundingJobId === selectedJob._id}
                   fundingBusy={fundingJobId !== null}

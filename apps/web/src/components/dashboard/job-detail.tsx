@@ -11,10 +11,12 @@ import {
 import { CircleCheckIcon, WalletIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
+import type { BlockchainClient } from "@/lib/blockchain";
 import type { EvaluationJob } from "@/lib/evaluations";
 import { formatDateTime, formatWei } from "@/lib/evaluations";
 
 import { CopyButton } from "./copy-button";
+import { SettlementReceipt } from "./settlement-receipt";
 import { JobStatusBadge } from "./status-badge";
 
 export interface FundingTransaction {
@@ -41,6 +43,7 @@ function SummaryItem({
 
 interface JobDetailProps {
   job: EvaluationJob;
+  blockchainClient: BlockchainClient | undefined;
   walletConnected: boolean;
   funding: boolean;
   fundingBusy: boolean;
@@ -58,7 +61,7 @@ function FundingPanel({
   fundingStatus,
   transaction,
   onFund,
-}: Omit<JobDetailProps, "error">) {
+}: Omit<JobDetailProps, "error" | "blockchainClient">) {
   const fundedOnChain = transaction?.confirmed || fundingStatus === "funded";
   const checkingFunding = fundingStatus === "checking";
   const needsFundingCheck = fundingStatus === "error";
@@ -106,6 +109,7 @@ function FundingPanel({
 
 export function JobDetail({
   job,
+  blockchainClient,
   transaction,
   error,
   ...fundingProps
@@ -215,6 +219,9 @@ export function JobDetail({
             </>
           ) : null}
         </dl>
+        {job.status === "created" ? null : (
+          <SettlementReceipt job={job} client={blockchainClient} />
+        )}
         {job.status === "funded" ? (
           <p className="text-muted-foreground text-xs">
             Funding received. This view updates automatically as the scheduler
@@ -223,8 +230,9 @@ export function JobDetail({
         ) : null}
         {job.status === "failed" ? (
           <p className="text-destructive text-xs">
-            This evaluation failed. No failure details were returned for this
-            job.
+            {job.failureReason
+              ? `This evaluation failed: ${job.failureReason}. No result was accepted and no provider was paid; the funder can refund it on-chain.`
+              : "This evaluation failed. No failure details were returned for this job."}
           </p>
         ) : null}
         {job.status === "succeeded" && job.score === undefined ? (
