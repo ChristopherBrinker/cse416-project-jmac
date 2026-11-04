@@ -29,6 +29,7 @@ import { NewEvaluationDialog } from "./new-evaluation-dialog";
 import { ProvidersPanel } from "./providers-panel";
 import { StatsOverview } from "./stats-overview";
 import { useBlockchainWallet } from "./use-blockchain-wallet";
+import { useJobRefund } from "./use-job-refund";
 import { WalletDialog } from "./wallet-dialog";
 
 const STACKED_LAYOUT_QUERY = "(max-width: 1023px)";
@@ -71,6 +72,11 @@ function LiveDashboard() {
     jobs.find((job) => job._id === selectedJobId) ?? jobs[0] ?? null;
   const createdJobId =
     selectedJob?.status === "created" ? selectedJob._id : null;
+  const failedJobId = selectedJob?.status === "failed" ? selectedJob._id : null;
+  const { refundingJobId, getRefundState, refund } = useJobRefund(
+    wallet,
+    failedJobId
+  );
 
   useEffect(() => {
     if (!createdJobId) {
@@ -191,7 +197,7 @@ function LiveDashboard() {
         <div className="flex flex-wrap items-center gap-2">
           <WalletDialog
             walletState={walletState}
-            busy={fundingJobId !== null}
+            busy={fundingJobId !== null || refundingJobId !== null}
           />
           <BenchmarkUploadDialog />
           <NewEvaluationDialog
@@ -240,6 +246,11 @@ function LiveDashboard() {
                   transaction={transactions[selectedJob._id]}
                   error={fundingErrors[selectedJob._id]}
                   onFund={() => fundJob(selectedJob)}
+                  walletAddress={wallet?.address}
+                  refundState={getRefundState(selectedJob._id)}
+                  refunding={refundingJobId === selectedJob._id}
+                  refundBusy={refundingJobId !== null}
+                  onRefund={() => refund(selectedJob._id)}
                 />
               ) : (
                 <div className="text-muted-foreground rounded-xl border p-8 text-center text-sm">

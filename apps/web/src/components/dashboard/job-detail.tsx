@@ -8,11 +8,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@cse416-project-jmac/ui/components/card";
-import { TriangleAlertIcon, WalletIcon } from "lucide-react";
+import {
+  CircleCheckIcon,
+  TriangleAlertIcon,
+  Undo2Icon,
+  WalletIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
+import { isSameAddress } from "@/lib/blockchain";
 import type { EvaluationJob } from "@/lib/evaluations";
-import { formatDateTime, formatScore, formatWei } from "@/lib/evaluations";
+import {
+  formatDateTime,
+  formatScore,
+  formatWei,
+  truncateHash,
+} from "@/lib/evaluations";
 
 import { CopyButton } from "./copy-button";
 import { JobStatusBadge } from "./status-badge";
@@ -24,6 +35,13 @@ export interface JobTransaction {
 export type FundingTransaction = JobTransaction;
 
 export type FundingStatus = "checking" | "unfunded" | "funded" | "error";
+
+export interface RefundState {
+  status: "checking" | "refundable" | "refunded" | "unavailable" | "error";
+  creator: string | undefined;
+  transaction: JobTransaction | undefined;
+  error: string | undefined;
+}
 
 const FAILURE_EXPLANATIONS: Record<string, string> = {
   "Timed out":
@@ -61,6 +79,11 @@ interface FundingPanelProps {
 
 interface JobDetailProps extends FundingPanelProps {
   error: string | undefined;
+  walletAddress: string | undefined;
+  refundState: RefundState;
+  refunding: boolean;
+  refundBusy: boolean;
+  onRefund: () => Promise<void>;
 }
 
 function FundingPanel({
@@ -141,6 +164,101 @@ function FailurePanel({
   );
 }
 
+const getRefundMessage = (
+  state: RefundState,
+  job: EvaluationJob,
+  walletAddress: string | undefined
+): string => {
+  switch (state.status) {
+    case "checking": {
+      return "Checking the contract for this job's refund status…";
+    }
+    case "refunded": {
+      return `The ${formatWei(job.price)} funding price was returned to the funding wallet.`;
+    }
+    case "unavailable": {
+      return "The contract does not hold refundable funds for this job.";
+    }
+    case "error": {
+      return "The refund status could not be checked.";
+    }
+    default: {
+      break;
+    }
+  }
+  if (!walletAddress) {
+    return "Connect the wallet that funded this job to reclaim its funding price.";
+  }
+  if (state.creator && !isSameAddress(state.creator, walletAddress)) {
+    return `Only the funding wallet ${truncateHash(state.creator)} can refund this job. Connect it to continue.`;
+  }
+  return `Return the ${formatWei(job.price)} funding price to your wallet. Network gas is additional.`;
+};
+
+const getRefundButtonLabel = (state: RefundState, refunding: boolean) => {
+  if (state.status === "checking") {
+    return "Checking refund status…";
+  }
+  if (state.status === "error") {
+    return "Check refund status";
+  }
+  if (state.status === "refunded") {
+    return "Refunded";
+  }
+  if (refunding) {
+    return "Confirming refund…";
+  }
+  return state.transaction ? "Check refund transaction" : "Refund job";
+};
+
+function RefundPanel({
+  job,
+  walletAddress,
+  refundState,
+  refunding,
+  refundBusy,
+  onRefund,
+}: Pick<
+  JobDetailProps,
+  | "job"
+  | "walletAddress"
+  | "refundState"
+  | "refunding"
+  | "refundBusy"
+  | "onRefund"
+>) {
+  const walletIsCreator =
+    walletAddress !== undefined &&
+    (refundState.creator === undefined ||
+      isSameAddress(refundState.creator, walletAddress));
+  const canRefund = refundState.status === "refundable" && walletIsCreator;
+  const disabled = refundBusy || (refundState.status !== "error" && !canRefund);
+  return (
+    <div className="bg-muted/50 space-y-3 rounded-lg border p-3">
+      <p className="flex items-center gap-2 text-sm font-medium">
+        {refundState.status === "refunded" ? (
+          <CircleCheckIcon className="size-4 text-emerald-500" />
+        ) : null}
+        {refundState.status === "refunded" ? "Refund complete" : "Refund"}
+      </p>
+      <p className="text-muted-foreground text-xs">
+        {getRefundMessage(refundState, job, walletAddress)}
+      </p>
+      {refundState.status === "unavailable" ? null : (
+        <Button
+          className="w-full"
+          variant="outline"
+          disabled={disabled}
+          onClick={onRefund}
+        >
+          <Undo2Icon data-icon="inline-start" />
+          {getRefundButtonLabel(refundState, refunding)}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 interface TransactionRow {
   label: string;
   hash: string;
@@ -149,7 +267,8 @@ interface TransactionRow {
 
 const getTransactionRows = (
   job: EvaluationJob,
-  fundingTransaction: JobTransaction | undefined
+  fundingTransaction: JobTransaction | undefined,
+  refundTransaction: JobTransaction | undefined
 ): TransactionRow[] => {
   const rows: TransactionRow[] = [];
   const fundingHash = job.jobFunded_tx ?? fundingTransaction?.hash;
@@ -165,6 +284,13 @@ const getTransactionRows = (
   }
   if (job.jobFailed_tx) {
     rows.push({ label: "Failed", hash: job.jobFailed_tx });
+  }
+  if (refundTransaction) {
+    rows.push({
+      label: "Refunded",
+      hash: refundTransaction.hash,
+      pending: !refundTransaction.confirmed,
+    });
   }
   return rows;
 };
@@ -204,9 +330,18 @@ export function JobDetail({
   job,
   transaction,
   error,
+  walletAddress,
+  refundState,
+  refunding,
+  refundBusy,
+  onRefund,
   ...fundingProps
 }: JobDetailProps) {
-  const transactionRows = getTransactionRows(job, transaction);
+  const transactionRows = getTransactionRows(
+    job,
+    transaction,
+    refundState.transaction
+  );
   return (
     <Card className="min-w-0 gap-4 rounded-xl">
       <CardHeader className="gap-2 border-b">
@@ -249,7 +384,17 @@ export function JobDetail({
           <FundingPanel job={job} transaction={transaction} {...fundingProps} />
         ) : null}
         {job.status === "failed" ? (
-          <FailurePanel failureReason={job.failureReason} />
+          <>
+            <FailurePanel failureReason={job.failureReason} />
+            <RefundPanel
+              job={job}
+              walletAddress={walletAddress}
+              refundState={refundState}
+              refunding={refunding}
+              refundBusy={refundBusy}
+              onRefund={onRefund}
+            />
+          </>
         ) : null}
         <TransactionsList rows={transactionRows} />
         {error ? (
@@ -258,6 +403,14 @@ export function JobDetail({
             className="text-destructive rounded-lg border p-3 text-xs"
           >
             {error}
+          </p>
+        ) : null}
+        {job.status === "failed" && refundState.error ? (
+          <p
+            role="alert"
+            className="text-destructive rounded-lg border p-3 text-xs"
+          >
+            {refundState.error}
           </p>
         ) : null}
         <dl className="space-y-3 border-t pt-4 text-xs">
