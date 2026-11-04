@@ -28,6 +28,7 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "check-types": "turbo run check-types",
+    "test": "turbo run test",
     "dev:web": "turbo run dev -F web --",
     "dev:server": "turbo run dev -F @cse416-project-jmac/backend --",
     "dev:setup": "turbo run dev:setup -F @cse416-project-jmac/backend --",

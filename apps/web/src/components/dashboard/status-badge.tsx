@@ -1,6 +1,10 @@
 import { Badge } from "@cse416-project-jmac/ui/components/badge";
 import { cn } from "@cse416-project-jmac/ui/lib/utils";
 
+import type { JobStage } from "@/lib/job-lifecycle";
+
+import { STAGE_LABELS } from "./job-presentation";
+
 const PRESENTATIONS: Record<string, { label: string; className: string }> = {
   created: {
     label: "Awaiting funding",
@@ -28,6 +32,28 @@ export function JobStatusBadge({ status }: { status: string }) {
     <Badge variant="outline" className={cn(presentation?.className)}>
       <span className="size-1.5 bg-current" aria-hidden="true" />
       {presentation?.label ?? status}
+    </Badge>
+  );
+}
+
+const STAGE_TONES: Record<JobStage, string> = {
+  awaiting_funding: PRESENTATIONS.created.className,
+  funding_pending: PRESENTATIONS.created.className,
+  funding_confirmed: PRESENTATIONS.funded.className,
+  evaluation_pending: PRESENTATIONS.funded.className,
+  accepted: PRESENTATIONS.succeeded.className,
+  failed: PRESENTATIONS.failed.className,
+  expired: PRESENTATIONS.failed.className,
+  refund_pending: PRESENTATIONS.created.className,
+  refunded: "border-muted-foreground/30 bg-muted text-muted-foreground",
+};
+
+/** The user-facing lifecycle stage, combining scheduler and contract state. */
+export function JobStageBadge({ stage }: { stage: JobStage }) {
+  return (
+    <Badge variant="outline" className={cn(STAGE_TONES[stage])}>
+      <span className="size-1.5 bg-current" aria-hidden="true" />
+      {STAGE_LABELS[stage]}
     </Badge>
   );
 }
