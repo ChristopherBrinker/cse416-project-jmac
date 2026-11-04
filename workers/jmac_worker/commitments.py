@@ -121,7 +121,7 @@ class CommitmentClient:
             from .specification import validate_specification
 
             spec = json.loads(assignment["specification"])
-            validate_specification(spec, eligible=False)
+            validate_specification(spec, eligible=False, supported=False)
             if (
                 spec["chain_id"] != self.config.chain_id
                 or spec["contract_address"].lower() != self.contract_address.lower()
@@ -162,7 +162,7 @@ class CommitmentClient:
             from .specification import validate_specification
 
             spec = json.loads(assignment["specification"])
-            validate_specification(spec, eligible=False)
+            validate_specification(spec, eligible=False, supported=False)
             if (
                 spec["chain_id"] != self.config.chain_id
                 or spec["contract_address"].lower() != self.contract_address.lower()
@@ -290,7 +290,7 @@ class CommitmentClient:
             from .specification import validate_specification
 
             spec = json.loads(assignment["specification"])
-            validate_specification(spec, eligible=False)
+            validate_specification(spec, eligible=False, supported=False)
             if (
                 spec["chain_id"] != self.config.chain_id
                 or spec["contract_address"].lower() != self.contract_address.lower()

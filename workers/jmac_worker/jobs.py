@@ -55,12 +55,14 @@ class Assignment:
     specification: str = ""
 
     def identity(self) -> dict[str, str]:
-        return {
+        identity = {
             "job_id": self.job_id,
             "provider_id": self.provider_id,
             "model_id": self.model_id,
-            "specification": self.specification,
         }
+        if self.specification:
+            identity["specification"] = self.specification
+        return identity
 
 
 def parse_assignments(value: object, provider_id: str) -> tuple[Assignment, ...]:
@@ -131,7 +133,7 @@ def has_saved_result(config: JobConfig, assignment: Assignment) -> bool:
         document = json.loads(path.read_bytes())
         if assignment.specification:
             spec = json.loads(assignment.specification)
-            validate_specification(spec, eligible=False)
+            validate_specification(spec, eligible=False, supported=False)
             if (
                 document.get("benchmark", {}).get("content_hash")
                 != spec["benchmark_sha256"]

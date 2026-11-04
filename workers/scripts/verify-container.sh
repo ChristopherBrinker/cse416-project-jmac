@@ -23,7 +23,7 @@ for worker_run in first second; do
         --memory 6g --memory-swap 6g --cpus 2 --pids-limit 128 \
         --network none \
         --read-only \
-        --tmpfs /tmp:rw,nosuid,nodev \
+        --tmpfs /tmp:rw,nosuid,nodev,size=256m \
         --user "$(id -u):$(id -g)" \
         --mount "type=bind,source=$worker_output_directory,target=/output" \
         "$worker_image_id" \

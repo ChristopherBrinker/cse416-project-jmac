@@ -60,7 +60,7 @@ The worker subscribes to `job:getJobsForProvider` with the registered provider I
 
 One evaluation runs at a time while heartbeats continue. Private result files contain the ordinary evaluation metadata plus `assignment: {job_id, provider_id, model_id}`; filenames hash that identity to avoid interpreting IDs as filesystem paths. Successful files are written atomically with private permissions and skipped on redelivery or restart. Run only one worker per provider and retain its results directory. Removing a result permits reevaluation. Invalid saved results stop execution for inspection rather than being overwritten.
 
-If an assignment disappears during inference or shutdown starts, its result is discarded. Native inference must finish before graceful shutdown completes; allow longer container stop timeouts for long benchmarks. Download retries use the configured bounded retry policy. Evaluation failures are logged by exception type only, leave no success file, and are attempted once per process; restart to retry after resolving the cause. The backend currently supplies no expected benchmark hash or immutable model revision in assignments, so the worker records the downloaded content hash but cannot independently verify it against backend metadata.
+If an assignment disappears during inference or shutdown starts, its result is discarded. Native inference must finish before graceful shutdown completes; allow longer container stop timeouts for long benchmarks. Download retries use the configured bounded retry policy. Evaluation failures are logged by exception type only, leave no success file, and are attempted once per process; restart to retry after resolving the cause. Execution requires the immutable `specification`, including the expected benchmark hash and model/tokenizer revisions. Current ID-only backend assignments are rejected; deploy execution mode only after the backend publishes the required fields.
 
 By default, assignment execution saves local results. Add `--commit-results` to run the contract lifecycle: commit scores, reveal after `CommitComplete`, and claim payment only after `JobComplete`. Configure `JMAC_RPC_URL`, `JMAC_CHAIN_ID`, `JMAC_CONTRACT_ADDRESS`, `JMAC_WALLET_ADDRESS`, and `JMAC_WALLET_PRIVATE_KEY` in the ignored runtime environment file; the address must match the wallet registered on the frontend. Use a dedicated funded development signer and one worker process per provider/wallet. Never commit the key. From `workers/`:
 
@@ -96,7 +96,7 @@ For provider presence, override the evaluation entrypoint and supply the environ
 ```sh
 docker run --rm \
   --read-only \
-  --tmpfs /tmp:rw,nosuid,nodev \
+  --tmpfs /tmp:rw,nosuid,nodev,size=256m \
   --stop-timeout 30 \
   --env-file workers/.env.provider \
   --entrypoint /opt/worker/.venv/bin/python \
@@ -119,7 +119,7 @@ mkdir -p workers/output
 docker run --rm \
   --network none \
   --read-only \
-  --tmpfs /tmp:rw,nosuid,nodev \
+  --tmpfs /tmp:rw,nosuid,nodev,size=256m \
   --user "$(id -u):$(id -g)" \
   --mount "type=bind,source=$PWD/workers/examples/benchmark.json,target=/input/benchmark.json,readonly" \
   --mount "type=bind,source=$PWD/workers/output,target=/output" \
@@ -253,3 +253,7 @@ Before inference the worker hashes bytes, checks version/count, rejects duplicat
 New cache paths include the canonical complete specification as well as IDs. Saved results validate their benchmark hash/count against it. Canonical JSON is only a local cache identity; the contract commitment remains exactly `keccak256(abi.encode(bool[] scores))`. Machine metadata stays outside that digest. Legacy result files remain recoverable for existing settlement journals; they do not meet the new specification guarantee. Do not migrate them into new assignments. Treat results and transaction journals as private, including backups: journals contain signed transactions. Keep separate 0700 results directories and wallets per provider; retain the existing process locks and atomic 0600 output writes.
 
 Production assignment inference runs in an offline child with a 300-second timeout covering model loading and prediction. A timed-out child is killed and reaped; no result is saved. Heartbeats continue while waiting. Parent warmup still precedes readiness. The child reload adds latency and memory; provision both models. For the supported container deployment use `--memory 6g --memory-swap 6g --cpus 2 --pids-limit 128` and a bounded tmpfs (`--tmpfs /tmp:rw,nosuid,nodev,size=256m`). The repeatability harness sets memory/CPU/PID limits. Bare-host execution has no hard memory cap; these container settings require Docker/cgroup validation before claiming host-exhaustion protection. Parent startup warmup is outside the child evaluation timeout.
+
+The 100-item and 10-choice limits are input safety ceilings, not a completion-time promise. The only real-model workload verified with the 300-second budget is the public example benchmark (3 short items, 2–3 choices each), on the local environment recorded in the verification evidence. No maximum-sized workload has been timed on the supported container hardware. Until throughput is measured there, schedule only that tested workload for verification; larger inputs can fail with a safe timeout and must not be advertised as supported for successful completion.
+
+Artifact identity is retained at module import. New assignments require this process's artifact; saved completed evaluations retain their recorded artifact and settings during settlement, with structural validation and chain/contract checks. Deploy immutable images rather than replacing Python source in a running process.

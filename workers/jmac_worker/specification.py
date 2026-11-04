@@ -17,12 +17,21 @@ MAX_CHOICE = 2048
 MAX_SECONDS = 300
 
 
-def worker_artifact() -> str:
+def _hash_worker_artifact() -> str:
     digest = sha256()
     for path in sorted(Path(__file__).parent.glob("*.py")):
         digest.update(path.name.encode())
         digest.update(path.read_bytes())
     return digest.hexdigest()
+
+
+# Retain the startup artifact identity even if files on disk change. Deployment
+# must still use an immutable image; a running interpreter cannot safely hot reload.
+WORKER_ARTIFACT = _hash_worker_artifact()
+
+
+def worker_artifact() -> str:
+    return WORKER_ARTIFACT
 
 
 def supported_settings() -> dict[str, object]:
@@ -44,7 +53,10 @@ def supported_settings() -> dict[str, object]:
     }
 
 
-def validate_specification(value: object, *, eligible: bool = True) -> str:
+def validate_specification(
+    value: object, *, eligible: bool = True, supported: bool = True
+) -> str:
+    """Enforce runner support for new work, retain historical settings for recovery."""
     if not isinstance(value, dict):
         raise ValueError("missing_specification")
     settings = supported_settings()
@@ -60,7 +72,10 @@ def validate_specification(value: object, *, eligible: bool = True) -> str:
     }
     if set(value) != required:
         raise ValueError("unsupported_specification")
-    if any(type(value[k]) is not type(v) or value[k] != v for k, v in settings.items()):
+    if any(
+        type(value[k]) is not type(v) or (supported and value[k] != v)
+        for k, v in settings.items()
+    ):
         raise ValueError("unsupported_configuration")
     for key in ("benchmark_id", "benchmark_version"):
         if not isinstance(value[key], str) or not value[key]:

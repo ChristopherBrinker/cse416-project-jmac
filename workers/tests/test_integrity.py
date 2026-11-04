@@ -2,7 +2,6 @@
 
 import json
 import subprocess
-import sys
 import unittest
 from dataclasses import replace
 from pathlib import Path
@@ -67,18 +66,84 @@ class IntegrityTests(unittest.TestCase):
             result_path(config, ASSIGNMENT), result_path(config, changed)
         )
 
-    def test_stalled_child_is_killed_and_error_is_safe(self):
+    def test_timeout_is_enforced_and_error_is_safe(self):
+        from jmac_worker.specification import MAX_SECONDS
+
         runner = object.__new__(LocalModelRunner)
         runner.cache_directory = Path("unused")
-        real_run = subprocess.run
-
-        def stalled(*args, **kwargs):
-            return real_run(
-                [sys.executable, "-c", "import time; time.sleep(10)"],
-                timeout=0.05,
-                capture_output=True,
-            )
-
-        with patch("subprocess.run", side_effect=stalled):
+        with patch(
+            "subprocess.run",
+            side_effect=subprocess.TimeoutExpired("private", MAX_SECONDS),
+        ) as run:
             with self.assertRaisesRegex(RuntimeError, "^isolated_inference_failed$"):
                 runner.predict_isolated([])
+        self.assertEqual(run.call_args.kwargs["timeout"], MAX_SECONDS)
+        self.assertTrue(run.call_args.kwargs["check"])
+
+    def test_artifact_hash_is_retained_without_rereading_files(self):
+        from jmac_worker.specification import worker_artifact
+
+        expected = worker_artifact()
+        with patch(
+            "pathlib.Path.read_bytes", side_effect=AssertionError("source reread")
+        ):
+            self.assertEqual(worker_artifact(), expected)
+            self.assertEqual(
+                validate_specification(RECORD["specification"]),
+                ASSIGNMENT.specification,
+            )
+
+    def test_historical_result_survives_worker_upgrade(self):
+        import tempfile
+        from unittest.mock import Mock
+
+        from jmac_worker.jobs import evaluate, has_saved_result, saved_assignments
+
+        old = {**RECORD["specification"], "worker_sha256": "0" * 64}
+        with self.assertRaisesRegex(ValueError, "unsupported_configuration"):
+            validate_specification(old)
+        historical = replace(
+            ASSIGNMENT, specification=validate_specification(old, supported=False)
+        )
+        runner = Mock()
+        runner.predict.return_value = [1, 0, 1]
+        runner.metadata.return_value = {"revision": "old"}
+        document = evaluate(BENCHMARK, runner)
+        document["assignment"] = historical.identity()
+        with tempfile.TemporaryDirectory() as directory:
+            config = JobConfig("https://example.convex.site", "model", Path(directory))
+            path = result_path(config, historical)
+            path.write_text(json.dumps(document))
+            self.assertEqual(saved_assignments(config, "provider"), (historical,))
+            self.assertTrue(has_saved_result(config, historical))
+
+    def test_legacy_result_retains_original_identity_and_filename(self):
+        import tempfile
+        from hashlib import sha256
+        from unittest.mock import Mock
+
+        from jmac_worker.jobs import (
+            Assignment,
+            evaluate,
+            has_saved_result,
+            saved_assignments,
+        )
+
+        identity = {"job_id": "job", "provider_id": "provider", "model_id": "model"}
+        legacy = Assignment("job", "provider", "model")
+        self.assertEqual(legacy.identity(), identity)
+        runner = Mock()
+        runner.predict.return_value = [1, 0, 1]
+        runner.metadata.return_value = {"revision": "old"}
+        document = evaluate(BENCHMARK, runner)
+        document["assignment"] = identity
+        with tempfile.TemporaryDirectory() as directory:
+            config = JobConfig("https://example.convex.site", "model", Path(directory))
+            original = Path(directory) / (
+                sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+                + ".json"
+            )
+            original.write_text(json.dumps(document))
+            self.assertEqual(result_path(config, legacy), original)
+            self.assertEqual(saved_assignments(config, "provider"), (legacy,))
+            self.assertTrue(has_saved_result(config, legacy))
