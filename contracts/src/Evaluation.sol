@@ -177,10 +177,9 @@ contract Evaluation {
 
         j.status = JobStatus.Refunded;
 
-        // Removed for now: scheduler expects JobFailed to only signify disagreement
-        /*if (timedOut) {
+        if (timedOut) {
             emit JobFailed(jobId);
-        }*/
+        }
 
         (bool success,) = msg.sender.call{value: j.price}("");
         require(success, "Transfer failed");

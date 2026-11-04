@@ -308,6 +308,18 @@ async function main() {
             }
           } else if (decoded.eventName === "JobFailed") {
             const jobId = decoded.args.jobId as Id<"jobs">;
+
+            const job = (await publicClient.readContract({
+              address: CONTRACT_ADDRESS,
+              abi,
+              functionName: "jobs",
+              args: [jobId],
+            })) as struct_job;
+
+            if (job[6] === 3) {
+              continue;
+            }
+
             const statusResult = await convexClient.mutation(
               api.job.setStatus,
               {
