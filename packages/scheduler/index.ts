@@ -18,6 +18,34 @@ interface SolidityEvent {
   args: any;
 }
 
+interface struct_provider {
+  addr: string;
+  id: string;
+  commit: string;
+  result: boolean[];
+  flag: boolean;
+  revealed: boolean;
+  claimed: boolean;
+}
+type struct_job = [
+  // creatorAddr
+  string,
+  // id
+  string,
+  // price
+  bigint,
+  // providerA
+  struct_provider,
+  // providerB
+  struct_provider,
+  // flag
+  boolean,
+  // status
+  number,
+  // commitDeadline
+  bigint,
+];
+
 async function main() {
   if (!process.env.BACKEND_WALLET_PRIVATE_KEY) {
     throw new Error("Provide the private key of the backend wallet");
@@ -88,15 +116,109 @@ async function main() {
     async () => {
       try {
         const timeout = (COMMIT_WINDOW + REVEAL_WINDOW) * 1000 + 30 * 1000;
-        const result = await convexClient.mutation(api.job.cleanUp, {
+        const result = await convexClient.query(api.job.getTimedOutJobs, {
           backendKey: BACKEND_CONVEX_KEY,
           timeout,
         });
-        if (!result.success) {
+        if (!result.success || !result.jobIds) {
           console.log("Job cleanup failed:", result.error);
           return;
         }
-        console.log(`Job cleanup modified ${result.modifiedCount} records`);
+        console.log(`Job cleanup found ${result.jobIds.length} records`);
+
+        await Promise.all(
+          result.jobIds.map(async (id) => {
+            let endStateA: string | undefined;
+            let endStateB: string | undefined;
+            let status = "failed";
+            let score: number | undefined;
+
+            try {
+              const job = (await publicClient.readContract({
+                address: CONTRACT_ADDRESS,
+                abi,
+                functionName: "jobs",
+                args: [id],
+              })) as struct_job;
+
+              const providerA = job[3];
+              const providerB = job[4];
+
+              const wasAssigned = providerA.flag && providerB.flag;
+              if (wasAssigned) {
+                const EMPTY_COMMIT =
+                  "0x0000000000000000000000000000000000000000000000000000000000000000";
+                const providerACommitted = providerA.commit !== EMPTY_COMMIT;
+                const providerBCommitted = providerB.commit !== EMPTY_COMMIT;
+                if (providerACommitted && providerBCommitted) {
+                  if (providerA.revealed && providerB.revealed) {
+                    if (job[6] === 1) {
+                      status = "succeeded";
+                      endStateA = "succeeded";
+                      endStateB = "succeeded";
+                      const scores = job[3].result;
+                      let correct = 0;
+                      for (const s of scores) {
+                        if (s) {
+                          correct++;
+                        }
+                      }
+                      score = (correct / scores.length) * 100;
+                    } else {
+                      status = "failed";
+                      endStateA = "disagreement";
+                      endStateB = "disagreement";
+                    }
+                  } else {
+                    endStateA = providerA.revealed
+                      ? "submitted"
+                      : "reveal_timeout";
+                    endStateB = providerB.revealed
+                      ? "submitted"
+                      : "reveal_timeout";
+                  }
+                } else {
+                  endStateA = providerACommitted
+                    ? "submitted"
+                    : "commit_timeout";
+                  endStateB = providerBCommitted
+                    ? "submitted"
+                    : "commit_timeout";
+                }
+              } else {
+                endStateA = "assignment_failed";
+                endStateB = "assignment_failed";
+              }
+            } catch {
+              console.log(`Failed to get job ${id} from blockchain`);
+              return;
+            }
+
+            try {
+              const statusResult = await convexClient.mutation(
+                api.job.setStatus,
+                {
+                  jobId: id,
+                  status,
+                  score,
+                  endStateA,
+                  endStateB,
+                  backendKey: BACKEND_CONVEX_KEY,
+                }
+              );
+              if (!statusResult.success) {
+                console.log(
+                  `Failed to set status for ${id}:`,
+                  statusResult.error
+                );
+                return;
+              }
+              console.log(`Updated ${id} status`);
+            } catch (error) {
+              console.log(`Failed to set status for ${id}:`, error);
+            }
+          })
+        );
       } catch (error) {
         console.log("Job cleanup error:", error);
       }
@@ -107,6 +229,7 @@ async function main() {
   async function assignProviders(
     jobId: Id<"jobs">,
     price: bigint,
+    jobFunded_tx: string,
     retry: boolean
   ) {
     const providerAssignment = await convexClient.mutation(
@@ -114,6 +237,7 @@ async function main() {
       {
         jobId,
         price,
+        jobFunded_tx,
         retry,
         backendKey: BACKEND_CONVEX_KEY,
       }
@@ -162,11 +286,21 @@ async function main() {
             const jobId = decoded.args.jobId as Id<"jobs">;
             const price = decoded.args.price as bigint;
 
-            const result = await assignProviders(jobId, price, false);
+            const result = await assignProviders(
+              jobId,
+              price,
+              log.transactionHash,
+              false
+            );
             if (!result.success && result.error === "Providers unavailable") {
               setTimeout(async () => {
                 try {
-                  await assignProviders(jobId, price, true);
+                  await assignProviders(
+                    jobId,
+                    price,
+                    log.transactionHash,
+                    true
+                  );
                 } catch {
                   /* */
                 }
@@ -174,11 +308,26 @@ async function main() {
             }
           } else if (decoded.eventName === "JobFailed") {
             const jobId = decoded.args.jobId as Id<"jobs">;
+
+            const job = (await publicClient.readContract({
+              address: CONTRACT_ADDRESS,
+              abi,
+              functionName: "jobs",
+              args: [jobId],
+            })) as struct_job;
+
+            if (job[6] === 3) {
+              continue;
+            }
+
             const statusResult = await convexClient.mutation(
               api.job.setStatus,
               {
                 jobId,
                 status: "failed",
+                endStateA: "disagreement",
+                endStateB: "disagreement",
+                tx: log.transactionHash,
                 backendKey: BACKEND_CONVEX_KEY,
               }
             );
@@ -207,6 +356,9 @@ async function main() {
                 jobId,
                 status: "succeeded",
                 score,
+                endStateA: "succeeded",
+                endStateB: "succeeded",
+                tx: log.transactionHash,
                 backendKey: BACKEND_CONVEX_KEY,
               }
             );

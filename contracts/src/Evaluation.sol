@@ -31,8 +31,8 @@ struct Provider {
 }
 
 contract Evaluation {
-    uint256 public constant COMMIT_WINDOW = 30 minutes;
-    uint256 public constant REVEAL_WINDOW = 15 minutes;
+    uint256 public constant COMMIT_WINDOW = 5 minutes;
+    uint256 public constant REVEAL_WINDOW = 2.5 minutes;
 
     mapping(string => Job) public jobs;
 
@@ -176,6 +176,7 @@ contract Evaluation {
         require(msg.sender == j.creatorAddr, "Unauthorized");
 
         j.status = JobStatus.Refunded;
+
         if (timedOut) {
             emit JobFailed(jobId);
         }
