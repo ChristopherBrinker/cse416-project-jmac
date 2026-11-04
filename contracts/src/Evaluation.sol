@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
+// Result policy (docs/m4/protocol.md): a job is accepted only when both assigned providers reveal
+// the same keyed digest of their ordered predicted choice indices and the same correct count.
+// Only the digest and the count reach the chain; questions, answer keys, predictions and
+// per-item correctness stay off-chain. Agreement proves the two providers reported identical
+// outputs, not that either one executed the model honestly.
 enum JobStatus {
     Open,
     Complete, // both reveals matched; providers may claim payment
@@ -18,16 +23,22 @@ struct Job {
     // workers read these structs by tuple index, so only append new fields
     JobStatus status;
     uint256 commitDeadline; // reveals close REVEAL_WINDOW after this
+    bytes32 specHash; // keccak256(abi.encode(benchmark content hash, model id)), set at assignment
+    uint256 itemCount; // benchmark length, bound into every result commitment
 }
 
 struct Provider {
     address addr;
     string id;
-    bytes32 commit; // hash of the provider's result, zero until committed
-    bool[] result; // since mc format, result can be represented by a list of true/false for each item
+    bytes32 commit; // resultCommitment of the provider's result, zero until committed
+    // keyed digest of the ordered predicted choice indices (see outputDigest in
+    // workers/jmac_worker/commitments.py); zero until revealed
+    bytes32 outputDigest;
     bool flag; // used to detect default Provider i.e. not initialized
     bool revealed;
     bool claimed;
+    // workers read this struct by tuple index, so only append new fields
+    uint256 correctCount; // revealed number of correctly answered items
 }
 
 contract Evaluation {
@@ -41,7 +52,9 @@ contract Evaluation {
     event JobFunded(string jobId, uint256 price);
     event ProvidersAssigned(string jobId, address addressA, string providerIdA, address addressB, string providerIdB);
     event CommitComplete(string jobId);
-    event JobComplete(string jobId, bool[] scores);
+    // Accepted-result evidence: the spec, the agreed output digest and the agreed score.
+    // Provider identities are in ProvidersAssigned and the jobs getter.
+    event JobComplete(string jobId, bytes32 specHash, bytes32 outputDigest, uint256 correctCount, uint256 itemCount);
     event JobFailed(string jobId);
 
     constructor(address backendAddr) {
@@ -62,14 +75,27 @@ contract Evaluation {
         emit JobFunded(jobId, msg.value);
     }
 
-    function assignProviders(string memory jobId, address addressA, string memory providerIdA, address addressB, string memory providerIdB) public {
+    function assignProviders(
+        string memory jobId,
+        address addressA,
+        string memory providerIdA,
+        address addressB,
+        string memory providerIdB,
+        bytes32 specHash,
+        uint256 itemCount
+    ) public {
         require(msg.sender == backend, "Unauthorized");
         require(addressA != address(0), "Invalid address");
         require(addressB != address(0), "Invalid address");
         require(addressA != addressB, "Providers must be distinct");
+        require(specHash != bytes32(0), "Invalid spec");
+        require(itemCount > 0, "Invalid item count");
 
         Job memory j = jobs[jobId];
         require(j.flag, "Job not found");
+        // the creator's own wallet may never evaluate its job; Convex also excludes the
+        // creator's account and pairs of providers sharing a user or wallet
+        require(addressA != j.creatorAddr && addressB != j.creatorAddr, "Creator cannot provide");
         // reassigning would reset commits already submitted
         require(!j.providerA.flag && !j.providerB.flag, "Providers already assigned");
         require(block.timestamp <= j.commitDeadline, "Commit deadline passed");
@@ -79,22 +105,26 @@ contract Evaluation {
             id: providerIdA,
             flag: true,
             commit: bytes32(0),
-            result: new bool[](0),
+            outputDigest: bytes32(0),
             revealed: false,
-            claimed: false
+            claimed: false,
+            correctCount: 0
         });
         Provider memory providerB = Provider({
             addr: addressB,
             id: providerIdB,
             flag: true,
             commit: bytes32(0),
-            result: new bool[](0),
+            outputDigest: bytes32(0),
             revealed: false,
-            claimed: false
+            claimed: false,
+            correctCount: 0
         });
 
         j.providerA = providerA;
         j.providerB = providerB;
+        j.specHash = specHash;
+        j.itemCount = itemCount;
 
         jobs[jobId] = j;
         emit ProvidersAssigned(jobId, addressA, providerIdA, addressB, providerIdB);
@@ -120,11 +150,28 @@ contract Evaluation {
         }
     }
 
-    // Called by each assigned provider to reveal the scores behind its commit. Reveals only open
-    // once both commits are in, so neither provider can base its commit on the other's scores.
-    function revealResult(string memory jobId, bool[] calldata scores) external {
-        require(scores.length > 0, "Invalid result");
+    // The commitment binds the result to this chain, contract, job, provider, evaluation spec and
+    // item count, so it cannot be replayed elsewhere or copied by the other provider. The secret
+    // salt stops anyone recovering the committed result by enumeration before the reveal.
+    // Must match result_commitment in workers/jmac_worker/commitments.py.
+    function resultCommitment(
+        string memory jobId,
+        address provider,
+        bytes32 outputDigest,
+        uint256 correctCount,
+        bytes32 salt
+    ) public view returns (bytes32) {
+        Job storage j = jobs[jobId];
+        return keccak256(
+            abi.encode(
+                block.chainid, address(this), jobId, provider, j.specHash, j.itemCount, outputDigest, correctCount, salt
+            )
+        );
+    }
 
+    // Called by each assigned provider to reveal the result behind its commit. Reveals only open
+    // once both commits are in, so neither provider can base its commit on the other's result.
+    function revealResult(string memory jobId, bytes32 outputDigest, uint256 correctCount, bytes32 salt) external {
         Job storage j = jobs[jobId];
         require(j.flag, "Job not found");
         require(j.providerA.flag && j.providerB.flag, "Providers not assigned");
@@ -133,17 +180,24 @@ contract Evaluation {
         require(j.providerA.commit != bytes32(0) && j.providerB.commit != bytes32(0), "Commits incomplete");
         require(!p.revealed, "Already revealed");
         require(block.timestamp <= j.commitDeadline + REVEAL_WINDOW, "Reveal deadline passed");
-        // must match the worker's encoding in workers/jmac_worker/commitments.py
-        require(keccak256(abi.encode(scores)) == p.commit, "Result does not match commit");
+        require(outputDigest != bytes32(0), "Invalid result");
+        require(correctCount <= j.itemCount, "Score exceeds item count");
+        require(
+            resultCommitment(jobId, msg.sender, outputDigest, correctCount, salt) == p.commit,
+            "Result does not match commit"
+        );
 
         p.revealed = true;
-        p.result = scores;
+        p.outputDigest = outputDigest;
+        p.correctCount = correctCount;
 
         if (j.providerA.revealed && j.providerB.revealed) {
-            // both reveals match their commits, so equal commits mean equal scores
-            if (j.providerA.commit == j.providerB.commit) {
+            // commits differ per provider (address and salt), so agreement compares the reveals
+            bool agreed = j.providerA.outputDigest == j.providerB.outputDigest
+                && j.providerA.correctCount == j.providerB.correctCount;
+            if (agreed) {
                 j.status = JobStatus.Complete;
-                emit JobComplete(jobId, scores);
+                emit JobComplete(jobId, j.specHash, outputDigest, correctCount, j.itemCount);
             } else {
                 j.status = JobStatus.Failed;
                 emit JobFailed(jobId);

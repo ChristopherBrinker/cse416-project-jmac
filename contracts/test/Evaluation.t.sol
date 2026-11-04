@@ -17,6 +17,8 @@ contract EvaluationCommitTest is Test {
     uint256 constant PRICE = 2500;
     bytes32 constant COMMIT_A = keccak256("result A");
     bytes32 constant COMMIT_B = keccak256("result B");
+    bytes32 constant SPEC = keccak256("spec");
+    uint256 constant ITEM_COUNT = 3;
 
     event CommitComplete(string jobId);
 
@@ -33,7 +35,7 @@ contract EvaluationCommitTest is Test {
     function fundAndAssign() internal {
         fundJob();
         vm.prank(backend);
-        evaluation.assignProviders(JOB_ID, providerA, "pA", providerB, "pB");
+        evaluation.assignProviders(JOB_ID, providerA, "pA", providerB, "pB", SPEC, ITEM_COUNT);
     }
 
     function test_FirstCommitDoesNotEmitCommitComplete() public {
@@ -129,7 +131,7 @@ contract EvaluationCommitTest is Test {
         vm.prank(creator);
         evaluation.fundJob{value: PRICE}("job2");
         vm.prank(backend);
-        evaluation.assignProviders("job2", providerA, "pA", providerB, "pB");
+        evaluation.assignProviders("job2", providerA, "pA", providerB, "pB", SPEC, ITEM_COUNT);
 
         vm.prank(providerA);
         evaluation.commitResult(JOB_ID, COMMIT_A);
@@ -151,7 +153,7 @@ contract EvaluationCommitTest is Test {
 
         vm.prank(backend);
         vm.expectRevert("Providers must be distinct");
-        evaluation.assignProviders(JOB_ID, providerA, "pA", providerA, "pA");
+        evaluation.assignProviders(JOB_ID, providerA, "pA", providerA, "pA", SPEC, ITEM_COUNT);
     }
 
     function test_RevertWhen_ProvidersAlreadyAssigned() public {
@@ -159,7 +161,7 @@ contract EvaluationCommitTest is Test {
 
         vm.prank(backend);
         vm.expectRevert("Providers already assigned");
-        evaluation.assignProviders(JOB_ID, providerA, "pA", outsider, "pC");
+        evaluation.assignProviders(JOB_ID, providerA, "pA", outsider, "pC", SPEC, ITEM_COUNT);
     }
 
     function test_ReassignmentCannotResetCommits() public {
@@ -170,7 +172,7 @@ contract EvaluationCommitTest is Test {
 
         vm.prank(backend);
         vm.expectRevert("Providers already assigned");
-        evaluation.assignProviders(JOB_ID, providerA, "pA", providerB, "pB");
+        evaluation.assignProviders(JOB_ID, providerA, "pA", providerB, "pB", SPEC, ITEM_COUNT);
 
         vm.prank(providerA);
         vm.expectRevert("Already committed");
