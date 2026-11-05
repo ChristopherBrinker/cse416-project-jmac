@@ -19,7 +19,7 @@ Anvil's default accounts and keys are public test keys. They hold fake ETH and m
 
 ### Labelled limitations in this demo
 
-- **Providers are simulated.** `packages/scheduler/demo-providers.ts` stands in for two `jmac_worker` processes. It heartbeats and drives the real contract lifecycle (commit → reveal → claim) with the worker's commitment encoding, but **runs no model and reads no benchmark**. It reports a fixed vector (`DEMO_SCORES`, default `1,1,0` → 66.7%). To use real workers instead, follow [`workers/README.md`](../workers/README.md) (needs `uv` or Docker and the pinned SmolLM2 model).
+- **Providers are simulated.** `packages/scheduler/demo-providers.ts` stands in for two `jmac_worker` processes. It heartbeats and drives the real contract lifecycle (commit → reveal → claim) with the worker's commitment encoding, but **runs no model and reads no benchmark**. It reveals a digest of fixed predictions (`DEMO_SCORES`, default `1,1,0` → 66.7% on a 3-item benchmark). To use real workers instead, follow [`workers/README.md`](../workers/README.md) (needs `uv` or Docker and the pinned SmolLM2 model).
 - **Model revision and worker version** appear as "not recorded" on receipts. The backend has no field for them yet.
 - **Admin approval** is a CLI command, not a UI.
 - See [requirements checklist](m4/requirements.md) for every remaining gap.
@@ -48,7 +48,7 @@ Names only. Never commit values.
 |  | `NEXT_PUBLIC_NET_URL` | same as `NET_URL` |
 | Convex deployment (`bun x convex env set`) | `BETTER_AUTH_SECRET`, `SITE_URL` (`http://localhost:7346`), `BACKEND_CONVEX_KEY` | see the root README |
 | `packages/scheduler/.env.demo.local` (simulator only, git-ignored) | `DEMO_RESULT_MODE` | `agree`, `disagree`, or `silent` |
-|  | `DEMO_SCORES` | optional, e.g. `1,1,0` (match the benchmark's item count) |
+|  | `DEMO_SCORES` | optional, e.g. `1,1,0` (per-item correctness pattern, repeated to the on-chain item count) |
 |  | `DEMO_PROVIDER_A_ID`, `DEMO_PROVIDER_A_SECRET`, `DEMO_PROVIDER_A_KEY` | provider A's Convex ID, worker secret, and Anvil account 2 key |
 |  | `DEMO_PROVIDER_B_ID`, `DEMO_PROVIDER_B_SECRET`, `DEMO_PROVIDER_B_KEY` | provider B's values with Anvil account 3 |
 
@@ -135,7 +135,7 @@ Upload JSON matching schema `1.0.0` (full spec in [`packages/backend/README.md`]
 3. **New evaluation** → pick the benchmark and **SmolLM2-135M-Instruct** → **Create evaluation**.
 4. In job details → **Fund job · 2,500 wei** → approve in MetaMask.
    - Expected progression: _Funding pending_ → _Funding confirmed_ → _Providers assigned_ → _Commits n/2 · Reveals n/2_ with a countdown → **Accepted result**.
-5. Expected receipt: **66.7%**, "Accuracy 0.667 on the worker's 0–1 scale · 2 of 3 items correct", benchmark v1.0.0 and SHA-256, model, result commitment, completion tx, contract address and chain, both providers' IDs and wallets, and "Payment claimed" for each provider (claims are shown separately from acceptance). No questions, answers, or per-item results appear.
+5. Expected receipt: **66.7%**, "Accuracy 0.667 on the worker's 0–1 scale · 2 of 3 items correct", benchmark v1.0.0 and SHA-256, model, result commitment, completion tx, contract address and chain, spec hash and output digest, three verification checks (spec hash, completion transaction, on-chain count), both providers' IDs and wallets, and "Payment claimed" for each provider (claims are shown separately from acceptance). No questions, answers, or per-item results appear.
 
 ### C. Eligible refund
 
@@ -146,11 +146,11 @@ Disagreement (immediate):
 3. Expected: **Failed: Providers disagreed on results** and **Refund available**.
 4. Optional: switch to account 2 → the button is blocked with "Only the funding wallet 0x7099… can refund this job".
 5. As account 1 → **Refund job** → approve. Rejecting first keeps the job "Refund available" (never "refunded").
-6. Expected: **Refund confirmed**, plus a refund transaction under Transactions. The contract's status field (the second-to-last value printed) is `3` (Refunded):
+6. Expected: **Refund confirmed**, plus a refund transaction under Transactions. The contract's status field (the seventh value printed) is `3` (Refunded):
 
    ```sh
    cast call 0x5FbDB2315678afecb367f032d93F642f64180aa3 \
-     "jobs(string)(address,string,uint256,(address,string,bytes32,bool[],bool,bool,bool),(address,string,bytes32,bool[],bool,bool,bool),bool,uint8,uint256)" \
+     "jobs(string)(address,string,uint256,(address,string,bytes32,bytes32,bool,bool,bool,uint256),(address,string,bytes32,bytes32,bool,bool,bool,uint256),bool,uint8,uint256,bytes32,uint256)" \
      <jobId> --rpc-url http://127.0.0.1:8545
    ```
 

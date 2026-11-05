@@ -9,6 +9,7 @@
     "dev": "tsx ./index.ts",
     "lint": "oxlint .",
     "check-types": "tsc --noEmit",
+    "test": "bun test",
     "demo:providers": "tsx ./demo-providers.ts"
   },
   "dependencies": {

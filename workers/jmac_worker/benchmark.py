@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import NoReturn
 
 BENCHMARK_SCHEMA_VERSION = "1.0.0"
+# Domain separator for the output-digest key. The key is derived from the private benchmark
+# bytes, so only parties holding the benchmark can recompute or enumerate output digests.
+OUTPUT_KEY_DOMAIN = b"jmac-output-key-v1:"
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,6 +27,7 @@ class Benchmark:
     version: str
     content_hash: str
     items: tuple[BenchmarkItem, ...]
+    output_key: str
 
 
 def _require_object(value: object, field: str) -> dict[str, object]:
@@ -104,4 +108,16 @@ def parse_benchmark(content: bytes) -> Benchmark:
         for item in items
     ):
         raise ValueError("Benchmark text exceeds supported limits")
-    return Benchmark(name, description, version, sha256(content).hexdigest(), items)
+    return Benchmark(
+        name,
+        description,
+        version,
+        sha256(content).hexdigest(),
+        items,
+        output_key(content),
+    )
+
+
+def output_key(content: bytes) -> str:
+    """Key for output digests; distinct from the public content hash of the same bytes."""
+    return sha256(OUTPUT_KEY_DOMAIN + content).hexdigest()

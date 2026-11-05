@@ -14,9 +14,9 @@ from typing import Protocol
 
 from .benchmark import parse_benchmark
 from .inference import LocalModelRunner, Question
-from .output import atomic_output
+from .output import atomic_output, atomic_write_bytes
 from .provider_api import ProviderAPIError, ProviderClient, validate_benchmark_origin
-from .scoring import is_valid_saved_evaluation, score_benchmark
+from .scoring import load_saved_evaluation, saved_benchmark_path, score_benchmark
 from .specification import validate_specification, verify_content
 
 LOGGER = logging.getLogger(__name__)
@@ -130,7 +130,9 @@ def has_saved_result(config: JobConfig, assignment: Assignment) -> bool:
     if not path.exists():
         return False
     try:
-        document = json.loads(path.read_bytes())
+        document = load_saved_evaluation(path)
+        if document is None:
+            raise ValueError("Saved result does not match its benchmark")
         if assignment.specification:
             spec = json.loads(assignment.specification)
             validate_specification(spec, eligible=False, supported=False)
@@ -140,10 +142,7 @@ def has_saved_result(config: JobConfig, assignment: Assignment) -> bool:
                 or document.get("total") != spec["item_count"]
             ):
                 raise ValueError("Saved specification mismatch")
-        valid = (
-            is_valid_saved_evaluation(document)
-            and document.get("assignment") == assignment.identity()
-        )
+        valid = document.get("assignment") == assignment.identity()
     except (ValueError, OSError):
         valid = False
     if not valid:
@@ -159,8 +158,8 @@ def saved_assignments(config: JobConfig, provider_id: str) -> tuple[Assignment, 
         # Excludes transaction/event journals and unrelated JSON files.
         if len(path.stem) != 64 or any(c not in "0123456789abcdef" for c in path.stem):
             continue
-        document = json.loads(path.read_bytes())
-        if not is_valid_saved_evaluation(document):
+        document = load_saved_evaluation(path)
+        if document is None:
             raise ValueError("Saved assignment result is invalid")
         identity = document.get("assignment")
         if not isinstance(identity, dict) or any(
@@ -275,7 +274,11 @@ async def execute_jobs(
                         continue
                     verify_content(content, assignment.specification)
                     document["assignment"] = assignment.identity()
-                    with atomic_output(result_path(config, assignment)) as output:
+                    path = result_path(config, assignment)
+                    # Saved first: the result is only trusted once it re-scores
+                    # against these exact bytes.
+                    atomic_write_bytes(saved_benchmark_path(path), content)
+                    with atomic_output(path) as output:
                         output.write(
                             json.dumps(document, indent=2, allow_nan=False) + "\n"
                         )

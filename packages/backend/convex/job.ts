@@ -1,6 +1,7 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
+import type { Doc } from "./_generated/dataModel";
 import { query, mutation } from "./_generated/server";
 
 export const createJob = mutation({
@@ -17,8 +18,16 @@ export const createJob = mutation({
     if (!(await ctx.db.get("models", args.modelId))) {
       return { success: false, error: "Model not found" };
     }
-    if (!(await ctx.db.get("benchmarks", args.benchmarkId))) {
+    const benchmark = await ctx.db.get("benchmarks", args.benchmarkId);
+    if (!benchmark) {
       return { success: false, error: "Benchmark not found" };
+    }
+    // Assignment records the item count on-chain; refuse before the creator can fund.
+    if (!benchmark.itemCount) {
+      return {
+        success: false,
+        error: "Benchmark has no recorded item count; re-upload it",
+      };
     }
 
     // Currently, price is fixed at 2500 wei
@@ -63,6 +72,8 @@ export const assignProviders = mutation({
     price: v.int64(),
     jobFunded_tx: v.string(),
     retry: v.boolean(),
+    // Funding wallet read from the contract; the contract rejects it as a provider.
+    creatorWallet: v.string(),
     backendKey: v.string(),
   },
   handler: async (ctx, args) => {
@@ -92,24 +103,52 @@ export const assignProviders = mutation({
       jobFunded_tx: args.jobFunded_tx,
     });
 
-    // This will be turned into a sensible algorithm later
-    const model_support = await ctx.db
+    const benchmark = await ctx.db.get("benchmarks", job.benchmarkId);
+    if (!benchmark?.itemCount) {
+      return {
+        success: false,
+        error: "Benchmark has no recorded item count; re-upload it",
+      };
+    }
+
+    const candidates = ctx.db
       .query("model_support")
       .withIndex("by_modelId_available", (q) =>
         q.eq("modelId", job.modelId).eq("available", true)
-      )
-      .take(2);
+      );
 
-    if (model_support.length !== 2) {
+    // Approval means a platform administrator set `approved` in the Convex dashboard (no app
+    // mutation grants it, so providers cannot approve themselves). The job
+    // creator never evaluates their own job, and two providers registered by the same user
+    // or sharing a wallet are never paired, so one account cannot supply both results.
+    // Candidates are read lazily until two eligible providers are found, so ineligible
+    // rows never hide eligible ones behind a fixed limit.
+    const creatorWallet = args.creatorWallet.toLowerCase();
+    const providers: Doc<"providers">[] = [];
+    for await (const ms of candidates) {
+      const p = await ctx.db.get("providers", ms.providerId);
+      const independent =
+        p !== null &&
+        p.approved &&
+        p.userId !== job.creatorId &&
+        p.walletAddress.toLowerCase() !== creatorWallet &&
+        !providers.some(
+          (chosen) =>
+            chosen.userId === p.userId ||
+            chosen.walletAddress.toLowerCase() === p.walletAddress.toLowerCase()
+        );
+      if (independent) {
+        providers.push(p);
+      }
+      if (providers.length === 2) {
+        break;
+      }
+    }
+
+    if (providers.length !== 2) {
       return { success: false, error: "Providers unavailable" };
     }
 
-    const providers = await Promise.all(
-      model_support.map(async (ms) => {
-        const p = await ctx.db.get("providers", ms.providerId);
-        return p!;
-      })
-    );
     for (const p of providers) {
       await ctx.db.patch("providers", p._id, {
         currentJobs: p.currentJobs + 1n,
@@ -130,7 +169,17 @@ export const assignProviders = mutation({
         finished: false,
       });
     }
-    return { success: true, providers };
+    // The scheduler records keccak256(abi.encode(contentHash, modelId)) and itemCount
+    // on-chain, so the evaluated benchmark bytes and model are fixed for the whole job.
+    return {
+      success: true,
+      providers,
+      spec: {
+        contentHash: benchmark.contentHash,
+        modelId: job.modelId,
+        itemCount: benchmark.itemCount,
+      },
+    };
   },
 });
 

@@ -169,6 +169,7 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
         description,
         version,
         contentHash,
+        itemCount: benchmark.items.length,
       }
     );
 
@@ -218,6 +219,7 @@ export const createBenchmarkEntry = internalMutation({
     description: v.string(),
     version: v.string(),
     contentHash: v.string(),
+    itemCount: v.number(),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db

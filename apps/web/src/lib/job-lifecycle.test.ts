@@ -21,7 +21,8 @@ const provider = (
   commit: undefined,
   revealed: false,
   claimed: false,
-  result: [],
+  outputDigest: undefined,
+  correctCount: 0,
   ...overrides,
 });
 
@@ -34,6 +35,8 @@ const chainJob = (
   price: 2500n,
   status: "open",
   providers: [provider(providerOverrides), provider(providerOverrides)],
+  specHash: `0x${"0".repeat(64)}`,
+  itemCount: 3,
   commitDeadline: COMMIT_DEADLINE,
   revealDeadline: REVEAL_DEADLINE,
   chainTime: 900,
