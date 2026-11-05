@@ -18,7 +18,7 @@ Chain 31337, contract `0x5FbDB2315678afecb367f032d93F642f64180aa3`, backend `0xf
 | refund completed job | reverted: Job not refundable |
 | reveal A again | reverted: Already revealed |
 
-Status Complete. Accepted digest `0x3826528d73cc18491a8a814b91cf328574faccda4a928a4a2beb434ee4a880e1` with a provider-claimed score of 2/3 (no answer key is involved; the contract only checks that the count does not exceed the item count). Contract transfers (balance change plus the claimant's own gas): A 500000 wei, B 500001 wei (B takes the odd wei). Each account's balance rose by its transfer minus claim gas. Contract balance 0 wei.
+Status Complete. Accepted digest `0x3826528d73cc18491a8a814b91cf328574faccda4a928a4a2beb434ee4a880e1` with a provider-claimed score of 2/3 (the contract never sees an answer key and does not validate correctness; it checks that each reveal opens its commitment, that both digests and counts match, and that the count does not exceed the item count). Contract transfers (balance change plus the claimant's own gas): A 500000 wei, B 500001 wei (B takes the odd wei). Each account's balance rose by its transfer minus claim gas. Contract balance 0 wei.
 
 ## 2. Disagreement (same claimed 2/3 score, different order) refunds the creator
 

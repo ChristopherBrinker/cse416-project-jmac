@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import "dotenv/config";
 import { api } from "@cse416-project-jmac/backend/convex/_generated/api";
@@ -30,6 +31,10 @@ interface struct_provider {
   claimed: boolean;
   correctCount: bigint;
 }
+const CHAIN_READ_ATTEMPTS = 3;
+const CHAIN_READ_RETRY_MS = 2000;
+const CHAIN_READ_FAILED = "Chain read failed";
+
 type struct_job = [
   // creatorAddr
   string,
@@ -233,6 +238,24 @@ async function main() {
     1000 * 60 * 2
   );
 
+  // Returns undefined if the RPC keeps failing; the caller retries the whole assignment.
+  async function readCreatorWallet(jobId: Id<"jobs">) {
+    for (let attempt = 1; attempt <= CHAIN_READ_ATTEMPTS; attempt += 1) {
+      try {
+        const [creatorWallet] = (await publicClient.readContract({
+          address: CONTRACT_ADDRESS,
+          abi,
+          functionName: "jobs",
+          args: [jobId],
+        })) as struct_job;
+        return creatorWallet;
+      } catch (error) {
+        console.log(`Reading job ${jobId} failed (attempt ${attempt}):`, error);
+        await sleep(CHAIN_READ_RETRY_MS);
+      }
+    }
+  }
+
   async function assignProviders(
     jobId: Id<"jobs">,
     price: bigint,
@@ -240,13 +263,12 @@ async function main() {
     retry: boolean
   ) {
     // The contract refuses the creator as a provider, so exclude its wallet before Convex
-    // records an assignment that could never reach the chain.
-    const [creatorWallet] = (await publicClient.readContract({
-      address: CONTRACT_ADDRESS,
-      abi,
-      functionName: "jobs",
-      args: [jobId],
-    })) as struct_job;
+    // records an assignment that could never reach the chain. Convex is untouched if this
+    // read fails, so the job stays "created" and the caller retries as a first attempt.
+    const creatorWallet = await readCreatorWallet(jobId);
+    if (!creatorWallet) {
+      return { success: false, error: CHAIN_READ_FAILED } as const;
+    }
     const providerAssignment = await convexClient.mutation(
       api.job.assignProviders,
       {
@@ -314,14 +336,21 @@ async function main() {
               log.transactionHash,
               false
             );
-            if (!result.success && result.error === "Providers unavailable") {
+            // "Providers unavailable" leaves the job funded in Convex; a failed chain read
+            // leaves it untouched. Both are retried once a minute later.
+            const retryable =
+              !result.success &&
+              (result.error === "Providers unavailable" ||
+                result.error === CHAIN_READ_FAILED);
+            if (retryable) {
+              const alreadyFunded = result.error === "Providers unavailable";
               setTimeout(async () => {
                 try {
                   await assignProviders(
                     jobId,
                     price,
                     log.transactionHash,
-                    true
+                    alreadyFunded
                   );
                 } catch {
                   /* */

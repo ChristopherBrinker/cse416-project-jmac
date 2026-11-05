@@ -166,7 +166,8 @@ PAID_B=$(($(balance "$B") - B_BEFORE + $(gas_cost "$CLAIM_B")))
 [ "$(balance "$CONTRACT")" = 0 ] || fail "funds left in contract after claims"
 log ""
 log "Status Complete. Accepted digest \`$AGREED\` with a provider-claimed score of 2/$ITEMS"
-log "(no answer key is involved; the contract only checks that the count does not exceed the item count)."
+log "(the contract never sees an answer key and does not validate correctness; it checks that each reveal opens"
+log "its commitment, that both digests and counts match, and that the count does not exceed the item count)."
 log "Contract transfers (balance change plus the claimant's own gas): A $PAID_A wei, B $PAID_B wei"
 log "(B takes the odd wei). Each account's balance rose by its transfer minus claim gas. Contract balance 0 wei."
 
