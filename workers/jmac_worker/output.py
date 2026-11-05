@@ -5,12 +5,24 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import TextIO
+from typing import IO, TextIO
 
 
 @contextmanager
 def atomic_output(path: Path) -> Iterator[TextIO]:
     """Create a private sibling file before evaluation; preserve old results on failure."""
+    with _atomic_file(path, binary=False) as output:
+        yield output
+
+
+def atomic_write_bytes(path: Path, content: bytes) -> None:
+    """Write exact bytes; text mode would rewrite line endings on Windows."""
+    with _atomic_file(path, binary=True) as output:
+        output.write(content)
+
+
+@contextmanager
+def _atomic_file(path: Path, *, binary: bool) -> Iterator[IO]:
     if not path.parent.is_dir():
         raise ValueError("Output directory must exist and be a directory")
     if path.exists() and not path.is_file():
@@ -23,8 +35,8 @@ def atomic_output(path: Path) -> Iterator[TextIO]:
     temporary_path = None
     try:
         with NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
+            mode="wb" if binary else "w",
+            encoding=None if binary else "utf-8",
             dir=path.parent,
             prefix=".jmac-result-",
             suffix=".tmp",

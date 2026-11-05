@@ -36,7 +36,7 @@ Tests: `test_SameCorrectnessWithDifferentWrongPredictionsFails`, `test_SameAccur
 
 | Data | On-chain | Where else |
 | --- | --- | --- |
-| Questions, choices, answer key | Never | Convex file storage; assigned providers only |
+| Questions, choices, answer key | Never | Convex file storage; assigned providers only (each keeps a private `<result>.benchmark.json` copy to re-check its saved result) |
 | Predicted choice indices | Never | Each provider's private result file |
 | Per-item correctness | Never (M3 published it; removed in M4) | Each provider's private result file |
 | Output digest (keyed, per job) | Yes, at reveal and in `JobComplete` | Result file |

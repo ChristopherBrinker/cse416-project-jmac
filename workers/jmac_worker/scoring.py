@@ -1,11 +1,12 @@
 """Score choice indices without invoking a model or accessing the network."""
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 
-from .benchmark import Benchmark
+from .benchmark import Benchmark, parse_benchmark
 
 RESULT_SCHEMA_VERSION = "3.0.0"
-HEX_DIGEST_LENGTH = 64
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,8 +28,6 @@ class EvaluationResult:
                 "output_key": self.benchmark.output_key,
             },
             "item_ids": [item.item_id for item in self.benchmark.items],
-            # bounds each prediction, so a tampered result cannot commit an invalid choice
-            "choice_counts": [len(item.choices) for item in self.benchmark.items],
             "predictions": list(self.predictions),
             "scores": list(self.scores),
             "correct": correct,
@@ -62,58 +61,31 @@ def score_benchmark(benchmark: Benchmark, predictions: object) -> EvaluationResu
     return EvaluationResult(benchmark, tuple(validated_predictions), tuple(scores))
 
 
-def is_valid_saved_evaluation(document: object) -> bool:
-    """Check score-vector integrity and the metadata needed to reuse a model result."""
-    if (
-        not isinstance(document, dict)
-        or document.get("schema_version") != RESULT_SCHEMA_VERSION
+def is_valid_saved_evaluation(document: object, benchmark: Benchmark) -> bool:
+    """Re-score saved predictions against the benchmark; every derived field must match."""
+    if not isinstance(document, dict) or not isinstance(
+        document.get("inference"), dict
     ):
         return False
-    scores = document.get("scores")
-    predictions = document.get("predictions")
-    item_ids = document.get("item_ids")
-    if (
-        not isinstance(scores, list)
-        or not scores
-        or any(type(score) is not bool for score in scores)
-    ):
+    try:
+        expected = score_benchmark(benchmark, document.get("predictions")).to_dict()
+    except ValueError:
         return False
-    if not isinstance(predictions, list) or len(predictions) != len(scores):
-        return False
-    choice_counts = document.get("choice_counts")
-    if not isinstance(choice_counts, list) or len(choice_counts) != len(scores):
-        return False
-    if any(type(count) is not int or count < 1 for count in choice_counts):
-        return False
-    if any(
-        type(prediction) is not int or not 0 <= prediction < count
-        for prediction, count in zip(predictions, choice_counts, strict=True)
-    ):
-        return False
-    if not isinstance(item_ids, list) or len(item_ids) != len(scores):
-        return False
-    if any(not isinstance(item_id, str) or not item_id for item_id in item_ids):
-        return False
-    correct = document.get("correct")
-    total = document.get("total")
-    accuracy = document.get("accuracy")
-    if type(correct) is not int or correct != sum(scores):
-        return False
-    if type(total) is not int or total != len(scores):
-        return False
-    if type(accuracy) not in (int, float) or accuracy != correct / total:
-        return False
-    benchmark = document.get("benchmark")
-    if not isinstance(benchmark, dict):
-        return False
-    if not isinstance(benchmark.get("name"), str) or not benchmark["name"]:
-        return False
-    if not isinstance(benchmark.get("version"), str):
-        return False
-    for field in ("content_hash", "output_key"):
-        value = benchmark.get(field)
-        if not isinstance(value, str) or len(value) != HEX_DIGEST_LENGTH:
-            return False
-        if any(character not in "0123456789abcdef" for character in value):
-            return False
-    return isinstance(document.get("inference"), dict)
+    saved = {field: document.get(field) for field in expected}
+    # JSON text keeps types strict: true is not 1, and 2.0 is not 2.
+    return json.dumps(saved, sort_keys=True) == json.dumps(expected, sort_keys=True)
+
+
+def saved_benchmark_path(result_path: Path) -> Path:
+    """Private copy of the evaluated benchmark bytes, kept beside the result."""
+    return result_path.with_suffix(".benchmark.json")
+
+
+def load_saved_evaluation(result_path: Path) -> dict | None:
+    """Load a saved result only if it matches the benchmark copy saved beside it."""
+    try:
+        document = json.loads(result_path.read_bytes())
+        benchmark = parse_benchmark(saved_benchmark_path(result_path).read_bytes())
+    except (OSError, ValueError):
+        return None
+    return document if is_valid_saved_evaluation(document, benchmark) else None

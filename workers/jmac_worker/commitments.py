@@ -9,7 +9,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from .output import atomic_output
 from .provider_api import validate_deployment_url
-from .scoring import is_valid_saved_evaluation
+from .scoring import load_saved_evaluation
 
 # v3: commit to a keyed digest of ordered predictions plus the correct count (docs/m4).
 ENCODING = "keccak256-abi-bound-salted-output-digest-v3"
@@ -181,8 +181,8 @@ class CommitmentClient:
             raise ValueError("RPC chain ID does not match JMAC_CHAIN_ID")
         if not self.web3.eth.get_code(self.contract_address):
             raise ValueError("No contract deployed at JMAC_CONTRACT_ADDRESS")
-        result = json.loads(result_path.read_bytes())
-        if not is_valid_saved_evaluation(result):
+        result = load_saved_evaluation(result_path)
+        if result is None:
             raise ValueError(
                 "Saved assignment result is invalid; inspect the results directory"
             )
@@ -417,8 +417,8 @@ class CommitmentClient:
             raise ValueError("RPC chain ID does not match JMAC_CHAIN_ID")
         if not self.web3.eth.get_code(self.contract_address):
             raise ValueError("No contract deployed at JMAC_CONTRACT_ADDRESS")
-        result = json.loads(result_path.read_bytes())
-        if not is_valid_saved_evaluation(result):
+        result = load_saved_evaluation(result_path)
+        if result is None:
             raise ValueError("Saved assignment result is invalid")
         assignment = result["assignment"]
         if assignment.get("specification"):

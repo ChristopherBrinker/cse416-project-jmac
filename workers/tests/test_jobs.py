@@ -25,6 +25,7 @@ from jmac_worker.provider_api import (
     ProviderClient,
     ProviderConfig,
 )
+from jmac_worker.scoring import saved_benchmark_path
 from jmac_worker.specification import supported_settings, validate_specification
 
 RECORD = {
@@ -165,6 +166,7 @@ class ExecutionTests(unittest.IsolatedAsyncioTestCase):
         document = json.loads(path.read_bytes())
         self.assertEqual(document["assignment"], ASSIGNMENT.identity())
         self.assertEqual(document["scores"], [True, False, True])
+        self.assertEqual(saved_benchmark_path(path).read_bytes(), BENCHMARK)
         self.assertTrue(has_saved_result(self.config, ASSIGNMENT))
         self.assertTrue(
             all(
@@ -308,7 +310,7 @@ class SavedResultTests(unittest.TestCase):
             "scores": [True],
             "predictions": [0],
             "item_ids": ["one"],
-            "choice_counts": [3, 3, 0],
+            "schema_version": "2.0.0",
             "total": 1,
             "correct": 0,
             "accuracy": 1.0,
@@ -318,11 +320,21 @@ class SavedResultTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config = JobConfig("https://example.convex.site", "model", Path(directory))
             path = result_path(config, ASSIGNMENT)
+            saved_benchmark_path(path).write_bytes(BENCHMARK)
             for field, value in corruptions.items():
                 with self.subTest(field=field):
                     path.write_text(json.dumps({**document, field: value}))
                     with self.assertRaises(ValueError):
                         has_saved_result(config, ASSIGNMENT)
+            path.write_text(json.dumps(document))
+            self.assertTrue(has_saved_result(config, ASSIGNMENT))
+            # The copy is checked too: a different benchmark changes the hashes.
+            saved_benchmark_path(path).write_bytes(BENCHMARK + b" ")
+            with self.assertRaises(ValueError):
+                has_saved_result(config, ASSIGNMENT)
+            saved_benchmark_path(path).unlink()
+            with self.assertRaises(ValueError):
+                has_saved_result(config, ASSIGNMENT)
 
     def test_cloud_origin_is_rejected_for_benchmark_download(self):
         with self.assertRaises(ValueError):
@@ -379,6 +391,7 @@ class SettlementRecoveryTests(unittest.IsolatedAsyncioTestCase):
             document = evaluate(BENCHMARK, runner)
             document["assignment"] = ASSIGNMENT.identity()
             path = result_path(config, ASSIGNMENT)
+            saved_benchmark_path(path).write_bytes(BENCHMARK)
             path.write_text(json.dumps(document))
             runner.reset_mock()
             client = Mock(spec=ProviderClient)
@@ -416,7 +429,9 @@ class SettlementRecoveryTests(unittest.IsolatedAsyncioTestCase):
             runner.metadata.return_value = {"revision": "pinned"}
             document = evaluate(BENCHMARK, runner)
             document["assignment"] = ASSIGNMENT.identity()
-            result_path(config, ASSIGNMENT).write_text(json.dumps(document))
+            path = result_path(config, ASSIGNMENT)
+            saved_benchmark_path(path).write_bytes(BENCHMARK)
+            path.write_text(json.dumps(document))
             client = Mock(spec=ProviderClient)
             client.config = ProviderConfig(
                 "https://example.convex.cloud",
@@ -455,6 +470,7 @@ class SettlementRecoveryTests(unittest.IsolatedAsyncioTestCase):
             document = evaluate(BENCHMARK, runner)
             document["assignment"] = ASSIGNMENT.identity()
             path = result_path(config, ASSIGNMENT)
+            saved_benchmark_path(path).write_bytes(BENCHMARK)
             path.write_text(json.dumps(document))
             runner.reset_mock()
             client = Mock(spec=ProviderClient)

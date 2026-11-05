@@ -180,7 +180,6 @@ class ScoringTests(unittest.TestCase):
                     "output_key": self.benchmark.output_key,
                 },
                 "item_ids": ["arithmetic", "capital", "comparison"],
-                "choice_counts": [3, 3, 2],
                 "predictions": [1, 0, 1],
                 "scores": [True, False, True],
                 "correct": 2,
@@ -189,12 +188,28 @@ class ScoringTests(unittest.TestCase):
             },
         )
 
-    def test_saved_prediction_beyond_its_choices_is_invalid(self) -> None:
+    def test_saved_result_is_rescored_against_its_benchmark(self) -> None:
         document = score_benchmark(self.benchmark, [1, 0, 1]).to_dict()
         document["inference"] = {"revision": "pinned"}
-        self.assertTrue(is_valid_saved_evaluation(document))
-        document["predictions"][2] = document["choice_counts"][2]
-        self.assertFalse(is_valid_saved_evaluation(document))
+        self.assertTrue(is_valid_saved_evaluation(document, self.benchmark))
+        # "comparison" has two choices; every other field is kept consistent.
+        tampered = deepcopy(document)
+        tampered["predictions"][2] = 2
+        tampered["scores"][2] = False
+        tampered["correct"] = 1
+        tampered["accuracy"] = 1 / 3
+        self.assertFalse(is_valid_saved_evaluation(tampered, self.benchmark))
+        for field, value in (
+            ("scores", [True, True, True]),
+            ("scores", [1, 0, 1]),
+            ("correct", 2.0),
+            ("item_ids", ["arithmetic", "capital", "other"]),
+            ("benchmark", {**document["benchmark"], "output_key": "0" * 64}),
+            ("inference", None),
+        ):
+            with self.subTest(field=field, value=value):
+                changed = {**document, field: value}
+                self.assertFalse(is_valid_saved_evaluation(changed, self.benchmark))
 
     def test_scores_are_booleans_in_memory_and_json(self) -> None:
         result = score_benchmark(self.benchmark, [1, 0, 1])

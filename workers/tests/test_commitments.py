@@ -9,6 +9,7 @@ from unittest.mock import Mock
 from eth_account import Account
 from web3.exceptions import TransactionNotFound
 
+from jmac_worker.benchmark import parse_benchmark
 from jmac_worker.commitments import (
     ChainConfig,
     CommitmentClient,
@@ -16,6 +17,7 @@ from jmac_worker.commitments import (
     result_commitment,
     spec_hash,
 )
+from jmac_worker.scoring import saved_benchmark_path, score_benchmark
 
 # Public deterministic test key; never use this wallet for real funds.
 KEY = "0x" + "01" * 32
@@ -28,7 +30,31 @@ CORRECT = 2
 OUTPUT_KEY = bytes.fromhex("33" * 32)
 SALT_22 = bytes.fromhex("22" * 32)
 DIGEST = output_digest(OUTPUT_KEY, "job", PREDICTIONS)
-SPEC = spec_hash("a" * 64, "model")
+# Saved results must re-score against real benchmark bytes, so transaction tests
+# use the example benchmark rather than the fixed contract vectors above.
+BENCHMARK_BYTES = (
+    Path(__file__).resolve().parents[1] / "examples/benchmark.json"
+).read_bytes()
+BENCHMARK = parse_benchmark(BENCHMARK_BYTES)
+RESULT_KEY = bytes.fromhex(BENCHMARK.output_key)
+RESULT_DIGEST = output_digest(RESULT_KEY, "job", PREDICTIONS)
+SPEC = spec_hash(BENCHMARK.content_hash, "model")
+
+
+def saved_result(predictions=PREDICTIONS, job_id="job"):
+    document = score_benchmark(BENCHMARK, list(predictions)).to_dict()
+    document["assignment"] = {
+        "job_id": job_id,
+        "provider_id": "provider",
+        "model_id": "model",
+    }
+    document["inference"] = {"revision": "pinned"}
+    return document
+
+
+def save_result(path, document):
+    saved_benchmark_path(path).write_bytes(BENCHMARK_BYTES)
+    path.write_text(json.dumps(document))
 
 
 class EncodingTests(unittest.TestCase):
@@ -110,32 +136,7 @@ class TransactionTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.path = Path(self.directory.name) / "result.json"
-        self.path.write_text(
-            json.dumps(
-                {
-                    "assignment": {
-                        "job_id": "job",
-                        "provider_id": "provider",
-                        "model_id": "model",
-                    },
-                    "scores": SCORES,
-                    "schema_version": "3.0.0",
-                    "predictions": [1, 0, 1],
-                    "item_ids": ["a", "b", "c"],
-                    "choice_counts": [2, 2, 2],
-                    "total": 3,
-                    "correct": 2,
-                    "accuracy": 2 / 3,
-                    "benchmark": {
-                        "name": "example",
-                        "version": "1",
-                        "content_hash": "a" * 64,
-                        "output_key": OUTPUT_KEY.hex(),
-                    },
-                    "inference": {"revision": "pinned"},
-                }
-            )
-        )
+        save_result(self.path, saved_result())
         self.config = ChainConfig(
             "http://localhost:8545", 31337, CONTRACT, ADDRESS, KEY
         )
@@ -177,7 +178,7 @@ class TransactionTests(unittest.TestCase):
         saved = json.loads(self.path.with_suffix(".salt.json").read_bytes())
         return bytes.fromhex(saved["salt"])
 
-    def commitment(self, address=ADDRESS, digest=DIGEST, correct=CORRECT):
+    def commitment(self, address=ADDRESS, digest=RESULT_DIGEST, correct=CORRECT):
         return result_commitment(
             31337, CONTRACT, "job", address, SPEC, 3, digest, correct, self.salt()
         )
@@ -260,9 +261,7 @@ class TransactionTests(unittest.TestCase):
 
     def test_changed_predictions_do_not_reuse_journal(self):
         self.client.submit(self.path)
-        result = json.loads(self.path.read_bytes())
-        result["predictions"] = [1, 1, 1]
-        self.path.write_text(json.dumps(result))
+        save_result(self.path, saved_result([1, 1, 1]))
         with self.assertRaisesRegex(ValueError, "identity"):
             self.client.submit(self.path)
         self.eth.send_raw_transaction.assert_called_once()
@@ -308,7 +307,7 @@ class TransactionTests(unittest.TestCase):
         committed = self.functions.commitResult.call_args.args
         self.assertEqual(committed, ("job", self.commitment()))
         journal = self.path.with_suffix(".commit.json").read_text()
-        self.assertNotIn(OUTPUT_KEY.hex(), journal)
+        self.assertNotIn(BENCHMARK.output_key, journal)
         self.assertNotIn("predictions", journal)
 
     def test_commitment_without_output_key_is_invalid(self):
@@ -322,6 +321,23 @@ class TransactionTests(unittest.TestCase):
         result = json.loads(self.path.read_bytes())
         result["scores"] = [True]
         self.path.write_text(json.dumps(result))
+        with self.assertRaisesRegex(ValueError, "invalid"):
+            self.client.submit(self.path)
+        self.eth.send_raw_transaction.assert_not_called()
+
+    def test_result_is_rechecked_against_its_benchmark_before_commit(self):
+        # "comparison" has two choices, so 2 is out of range even with
+        # self-consistent scores and counts.
+        out_of_range = saved_result()
+        out_of_range["predictions"][2] = 2
+        out_of_range["scores"][2] = False
+        out_of_range["correct"] = 1
+        out_of_range["accuracy"] = 1 / 3
+        self.path.write_text(json.dumps(out_of_range))
+        with self.assertRaisesRegex(ValueError, "invalid"):
+            self.client.submit(self.path)
+        save_result(self.path, saved_result())
+        saved_benchmark_path(self.path).unlink()
         with self.assertRaisesRegex(ValueError, "invalid"):
             self.client.submit(self.path)
         self.eth.send_raw_transaction.assert_not_called()
@@ -366,7 +382,7 @@ class SettlementTests(unittest.TestCase):
             "worker_sha256": "0" * 64,
             "benchmark_id": "benchmark",
             "benchmark_version": "1",
-            "benchmark_sha256": "a" * 64,
+            "benchmark_sha256": BENCHMARK.content_hash,
             "item_count": 3,
             "commit_deadline": 1000,
             "reveal_deadline": 1900,
@@ -382,7 +398,7 @@ class SettlementTests(unittest.TestCase):
         self.emit("CommitComplete")
         self.client.settle(self.path)
         self.functions.revealResult.assert_called_once_with(
-            "job", DIGEST, CORRECT, self.salt()
+            "job", RESULT_DIGEST, CORRECT, self.salt()
         )
         self.assertTrue(self.path.with_suffix(".reveal.json").exists())
 
@@ -412,7 +428,7 @@ class SettlementTests(unittest.TestCase):
         self.emit("CommitComplete")
         self.assertFalse(self.client.advance(self.path))
         self.functions.revealResult.assert_called_once_with(
-            "job", DIGEST, CORRECT, self.salt()
+            "job", RESULT_DIGEST, CORRECT, self.salt()
         )
         self.assertTrue(self.path.with_suffix(".reveal.json").exists())
         self.functions.claimPayment.assert_not_called()
@@ -536,7 +552,7 @@ class SettlementTests(unittest.TestCase):
         document = json.loads(self.path.read_bytes())
         document["assignment"]["job_id"] = "next-job"
         next_path = self.path.with_name("next.json")
-        next_path.write_text(json.dumps(document))
+        save_result(next_path, document)
         self.provider[2] = bytes(32)
         self.client.submit(next_path)
         self.functions.commitResult.return_value.build_transaction.assert_not_called()
