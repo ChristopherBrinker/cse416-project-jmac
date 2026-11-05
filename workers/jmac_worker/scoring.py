@@ -88,10 +88,17 @@ def _is_committed_legacy_result(document: object) -> bool:
         or document.get("schema_version") != RESULT_SCHEMA_VERSION
     ):
         return False
+    assignment = document.get("assignment")
     benchmark = document.get("benchmark")
     predictions = document.get("predictions")
     return (
-        isinstance(benchmark, dict)
+        isinstance(assignment, dict)
+        and all(
+            isinstance(assignment.get(field), str) and assignment[field]
+            for field in ("job_id", "provider_id", "model_id")
+        )
+        and isinstance(assignment.get("specification", ""), str)
+        and isinstance(benchmark, dict)
         and all(
             isinstance(benchmark.get(field), str)
             for field in ("content_hash", "output_key")

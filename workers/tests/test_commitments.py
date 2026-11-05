@@ -585,6 +585,22 @@ class SettlementTests(unittest.TestCase):
             self.client.advance(self.path)
         self.functions.revealResult.assert_not_called()
 
+    def test_committed_result_without_benchmark_copy_needs_its_identity(self):
+        self.commit_without_benchmark_copy()
+        valid = saved_result()
+        for assignment in (
+            None,
+            {},
+            {**valid["assignment"], "job_id": ""},
+            {**valid["assignment"], "provider_id": 7},
+            {**valid["assignment"], "specification": {}},
+        ):
+            with self.subTest(assignment=assignment):
+                self.path.write_text(json.dumps({**valid, "assignment": assignment}))
+                with self.assertRaisesRegex(ValueError, "invalid"):
+                    self.client.advance(self.path)
+        self.functions.revealResult.assert_not_called()
+
     def test_removed_assignment_rebroadcasts_existing_commit_journal(self):
         self.provider[2] = bytes(32)
         self.client.submit(self.path)
