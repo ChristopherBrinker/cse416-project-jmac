@@ -1004,29 +1004,26 @@ contract EvaluationSettlementTest is Test {
         evaluation.assignProviders(JOB_ID, providerA, "pA", providerB, "pB", SPEC, 0);
     }
 
-    // A provider that copies the other's commitment cannot open it, so it cannot free-ride.
+    // A provider that copies the other's commitment on the same job cannot open it, even after
+    // seeing the other's digest, count and salt revealed: only the provider address differs.
     function test_CopiedCommitCannotBeRevealed() public {
         uint256 deadline = block.timestamp + evaluation.COMMIT_WINDOW() + evaluation.REVEAL_WINDOW();
-        commitAgreeing();
+        fundAndAssign(JOB_ID, PRICE, providerA, providerB);
         bytes32 copied = commitOf(JOB_ID, providerA, digest, COUNT);
-        vm.prank(creator);
-        evaluation.fundJob{value: PRICE}("job2");
-        vm.prank(backend);
-        evaluation.assignProviders("job2", providerA, "pA", providerB, "pB", SPEC, ITEM_COUNT);
         vm.prank(providerA);
-        evaluation.commitResult("job2", commitOf("job2", providerA, digest, COUNT));
+        evaluation.commitResult(JOB_ID, copied);
         vm.prank(providerB);
-        evaluation.commitResult("job2", copied);
+        evaluation.commitResult(JOB_ID, copied);
 
         vm.prank(providerA);
-        evaluation.revealResult("job2", digest, COUNT, SALT);
+        evaluation.revealResult(JOB_ID, digest, COUNT, SALT);
         vm.prank(providerB);
         vm.expectRevert("Result does not match commit");
-        evaluation.revealResult("job2", digest, COUNT, SALT);
+        evaluation.revealResult(JOB_ID, digest, COUNT, SALT);
 
         vm.warp(deadline + 1);
         vm.prank(creator);
-        evaluation.refund("job2");
+        evaluation.refund(JOB_ID);
         assertEq(providerA.balance + providerB.balance, 0);
     }
 

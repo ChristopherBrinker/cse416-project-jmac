@@ -239,6 +239,14 @@ async function main() {
     jobFunded_tx: string,
     retry: boolean
   ) {
+    // The contract refuses the creator as a provider, so exclude its wallet before Convex
+    // records an assignment that could never reach the chain.
+    const [creatorWallet] = (await publicClient.readContract({
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "jobs",
+      args: [jobId],
+    })) as struct_job;
     const providerAssignment = await convexClient.mutation(
       api.job.assignProviders,
       {
@@ -246,6 +254,7 @@ async function main() {
         price,
         jobFunded_tx,
         retry,
+        creatorWallet,
         backendKey: BACKEND_CONVEX_KEY,
       }
     );

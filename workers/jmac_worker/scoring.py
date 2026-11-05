@@ -27,6 +27,8 @@ class EvaluationResult:
                 "output_key": self.benchmark.output_key,
             },
             "item_ids": [item.item_id for item in self.benchmark.items],
+            # bounds each prediction, so a tampered result cannot commit an invalid choice
+            "choice_counts": [len(item.choices) for item in self.benchmark.items],
             "predictions": list(self.predictions),
             "scores": list(self.scores),
             "correct": correct,
@@ -78,7 +80,15 @@ def is_valid_saved_evaluation(document: object) -> bool:
         return False
     if not isinstance(predictions, list) or len(predictions) != len(scores):
         return False
-    if any(type(prediction) is not int or prediction < 0 for prediction in predictions):
+    choice_counts = document.get("choice_counts")
+    if not isinstance(choice_counts, list) or len(choice_counts) != len(scores):
+        return False
+    if any(type(count) is not int or count < 1 for count in choice_counts):
+        return False
+    if any(
+        type(prediction) is not int or not 0 <= prediction < count
+        for prediction, count in zip(predictions, choice_counts, strict=True)
+    ):
         return False
     if not isinstance(item_ids, list) or len(item_ids) != len(scores):
         return False

@@ -14,7 +14,7 @@ from unittest.mock import patch
 from jmac_worker.__main__ import main
 from jmac_worker.benchmark import load_benchmark
 from jmac_worker.output import atomic_output
-from jmac_worker.scoring import score_benchmark
+from jmac_worker.scoring import is_valid_saved_evaluation, score_benchmark
 
 WORKERS_DIRECTORY = Path(__file__).resolve().parents[1]
 BENCHMARK_PATH = WORKERS_DIRECTORY / "examples" / "benchmark.json"
@@ -180,6 +180,7 @@ class ScoringTests(unittest.TestCase):
                     "output_key": self.benchmark.output_key,
                 },
                 "item_ids": ["arithmetic", "capital", "comparison"],
+                "choice_counts": [3, 3, 2],
                 "predictions": [1, 0, 1],
                 "scores": [True, False, True],
                 "correct": 2,
@@ -187,6 +188,13 @@ class ScoringTests(unittest.TestCase):
                 "accuracy": 2 / 3,
             },
         )
+
+    def test_saved_prediction_beyond_its_choices_is_invalid(self) -> None:
+        document = score_benchmark(self.benchmark, [1, 0, 1]).to_dict()
+        document["inference"] = {"revision": "pinned"}
+        self.assertTrue(is_valid_saved_evaluation(document))
+        document["predictions"][2] = document["choice_counts"][2]
+        self.assertFalse(is_valid_saved_evaluation(document))
 
     def test_scores_are_booleans_in_memory_and_json(self) -> None:
         result = score_benchmark(self.benchmark, [1, 0, 1])

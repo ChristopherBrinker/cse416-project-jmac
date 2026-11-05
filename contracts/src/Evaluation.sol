@@ -3,8 +3,9 @@ pragma solidity ^0.8.13;
 
 // Result policy (docs/m4/protocol.md): a job is accepted only when both assigned providers reveal
 // the same keyed digest of their ordered predicted choice indices and the same correct count.
-// Only the digest and the count reach the chain; questions, answer keys, predictions and
-// per-item correctness stay off-chain. Agreement proves the two providers reported identical
+// On-chain data: each provider's commitment (at commit), and its output digest, correct count
+// and salt (in reveal calldata and storage), plus the spec hash and item count from assignment.
+// Questions, answer keys, predictions and per-item correctness stay off-chain. Agreement proves the two providers reported identical
 // outputs, not that either one executed the model honestly.
 enum JobStatus {
     Open,

@@ -9,7 +9,7 @@ Owner: Anthony (lead). Policies referenced here are defined in [protocol.md](pro
 | Contract unit + fuzz | `cd contracts && forge test` | 91 passed (13 commit, 78 settlement incl. 1 fuzz) |
 | Chain-level E2E on Anvil | `bash contracts/script/e2e-settlement.sh docs/m4/evidence/anvil-settlement.md` | Passed; evidence in [evidence/anvil-settlement.md](evidence/anvil-settlement.md) |
 | ABI drift | `cd contracts && forge build && bun script/sync-abi.ts --check` | Passed |
-| Worker | `cd workers && uv sync --extra inference --extra provider --extra chain --locked && uv run --no-sync python -m unittest discover -s tests` | 119 passed locally; 5 not runnable on the Windows dev machine (PyTorch not installed, POSIX signals). CI runs all on Linux |
+| Worker | `cd workers && uv sync --extra inference --extra provider --extra chain --locked && uv run --no-sync python -m unittest discover -s tests` | 133 of 138 passed locally; 5 not runnable on the Windows dev machine (PyTorch not installed, POSIX signals). CI runs all on Linux |
 | Scheduler spec-hash vector | `bun test packages/scheduler` | 2 passed |
 | Lint, format, types | `bun run lint && bun run check-types` | Passed |
 
@@ -48,7 +48,7 @@ The Anvil script proves the contract rules. This run proves the whole system: br
 3. From the repo root: `bun contracts/script/sync-abi.ts` (copies the ABI to web, scheduler and worker).
 4. Set `CONTRACT_ADDRESS`/`NEXT_PUBLIC_CONTRACT_ADDRESS` and start `bun run dev` and the scheduler (`cd packages/scheduler && bun run dev`) as in the root README.
 5. Sign in as three users: a creator, provider-operator A, provider-operator B. Each operator registers one provider with its own wallet (accounts 2 and 3) and the SmolLM2 model. A platform administrator sets `approved = true` for both in the Convex dashboard.
-6. Start two workers, each with its own `.env.provider`, results directory and wallet: `uv run --env-file .env.provider --extra inference --extra provider --extra chain --locked python -m jmac_worker.provider --execute-jobs --commit-results`.
+6. Start two workers from `workers/`, each with its own `.env.provider`, results directory and wallet: `cd workers && uv run --env-file .env.provider --extra inference --extra provider --extra chain --locked python -m jmac_worker.provider --execute-jobs --commit-results`.
 7. As the creator, upload a benchmark (re-upload any M3 benchmark so `itemCount` is recorded).
 
 Record starting balances: `cast balance <addr>` for the creator, A, B and the contract.
@@ -59,8 +59,8 @@ Record starting balances: `cast balance <addr>` for the creator, A, B and the co
 | --- | --- | --- | --- |
 | S1 | Success | Creator connects the wallet in the dashboard, creates a job, clicks **Fund job**. Wait for both workers. | `JobFunded`, `ProvidersAssigned` (spec hash and item count), two commits, `CommitComplete`, two reveals, `JobComplete`, two claims. Contract balance returns to its start. A + B receive exactly the price (B takes the odd wei). UI receipt shows: spec hash matches, completion transaction verified, dashboard score matches the on-chain count, both providers paid. |
 | S2 | Disagreement | Repeat S1 with worker B pointed at a different model revision or edited predictions (e.g. a test build that flips one prediction). | `JobFailed` after the second reveal; no `JobComplete`; both claims revert `Job not complete`. Creator clicks **Refund** in the receipt; creator balance rises by the price minus gas; second refund reverts. |
-| S3 | Missing provider | Repeat S1 but stop worker B before it commits. | After the 5-minute commit window: worker B cannot commit, Refund button appears, refund succeeds, provider A is not paid, Convex job shows failed with reason "Timed out". |
-| S4 | Recovery | During S1, kill worker A after its commit journal is written (`<result>.commit.json` exists) and restart it; restart the scheduler between `CommitComplete` and `JobComplete`. Replay a funding log by restarting the scheduler with history. | Exactly one commit, reveal and claim transaction per provider (count `cast logs` / journals). Scheduler's second `setStatus` returns "Job is already in a final state". No duplicate transfer: A + B total equals the price. |
+| S3 | Missing provider | Repeat S1 but stop worker B before it commits. | On-chain, right after the 5-minute commit window: worker B cannot commit; after reloading the job, the Refund button appears; the refund succeeds and provider A is not paid. In Convex, later: the scheduler's cleanup marks the job failed with reason "Timed out" once commit + reveal windows + 30 s (8 minutes from funding) have passed, on its next 2-minute pass, so allow up to about 10 minutes. |
+| S4 | Recovery | During S1, kill worker A after its commit journal is written (`<result>.commit.json` exists) and restart it. Restart worker B between `CommitComplete` and its reveal. | Exactly one commit, reveal and claim transaction per provider (count `cast logs` / journals); restarted workers replay contract events from their journals and rebroadcast only identical signed bytes. No duplicate transfer: A + B total equals the price. Not covered: the scheduler watches only new blocks, so events emitted while it is down are not replayed (known gap R11); do not restart it mid-run. |
 | S5 | Privacy | See section 4. | All checks pass. |
 
 ## 4. Privacy checks
@@ -70,7 +70,7 @@ Record starting balances: `cast balance <addr>` for the creator, A, B and the co
 | Unassigned provider cannot download | `GET /benchmark?jobId=<job>&providerId=<other provider>&secret=<its secret>` | 400 "Provider not assigned to this job" |
 | Wrong secret cannot download | Same request with an assigned provider ID and a wrong secret | 400 "Invalid provider id or secret" |
 | Download after the job finished | Assigned provider repeats the request after settlement | 400 (assignment is `finished`) |
-| No questions or answers in public queries | Inspect `benchmark:getBenchmarks` and `job:getUserJobs` responses in the browser network tab | Only name, description, version, owner, SHA-256 |
+| No questions or answers in public queries | Inspect `benchmark:getBenchmarks` and `job:getUserJobs` responses in the browser network tab | `getBenchmarks`: benchmark metadata only (ID, name, description, version, owner name, SHA-256). `getUserJobs`: job metadata, IDs, status, score and transaction hashes. Neither contains questions, choices, answers or stored benchmark contents |
 | No questions, answers, predictions or per-item correctness on-chain | `cast logs --address <contract>` and `cast tx <hash>` for every reveal; compare with `protocol.md` §2 | Only commitments, salts, digests, counts, spec hash |
 | No secrets or predictions in logs | Search worker and scheduler output for an item prompt, the output key, and the provider secret | No matches |
 

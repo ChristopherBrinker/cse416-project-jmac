@@ -308,6 +308,7 @@ class SavedResultTests(unittest.TestCase):
             "scores": [True],
             "predictions": [0],
             "item_ids": ["one"],
+            "choice_counts": [0],
             "total": 1,
             "correct": 0,
             "accuracy": 1.0,

@@ -7,8 +7,13 @@
 # Uses only Anvil's public development accounts; never point this at a real network.
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
 EVIDENCE=${1:-/dev/stdout}
+# Resolve a relative evidence path against the caller's directory before changing into contracts/.
+case "$EVIDENCE" in
+/*) ;;
+*) EVIDENCE="$PWD/$EVIDENCE" ;;
+esac
+cd "$(dirname "$0")/.."
 PORT=${ANVIL_PORT:-8546}
 RPC="http://127.0.0.1:$PORT"
 : >"$EVIDENCE" 2>/dev/null || true
@@ -19,18 +24,29 @@ CREATOR_KEY=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
 A_KEY=0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a
 B_KEY=0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6
 
-anvil --port "$PORT" --silent &
-ANVIL_PID=$!
-trap 'kill $ANVIL_PID 2>/dev/null || true' EXIT
-for _ in $(seq 50); do
-    cast chain-id --rpc-url "$RPC" >/dev/null 2>&1 && break
-    sleep 0.2
-done
-
 fail() {
     echo "e2e: $*" >&2
     exit 1
 }
+
+# Never settle against a node we did not start: refuse a port that already answers.
+if cast chain-id --rpc-url "$RPC" >/dev/null 2>&1; then
+    fail "port $PORT already serves an RPC node; set ANVIL_PORT to a free port"
+fi
+anvil --port "$PORT" --silent &
+ANVIL_PID=$!
+trap 'kill $ANVIL_PID 2>/dev/null || true' EXIT
+READY=
+for _ in $(seq 50); do
+    kill -0 "$ANVIL_PID" 2>/dev/null || fail "anvil exited (could it bind port $PORT?)"
+    if cast chain-id --rpc-url "$RPC" >/dev/null 2>&1; then
+        READY=1
+        break
+    fi
+    sleep 0.2
+done
+[ -n "$READY" ] || fail "anvil did not start on port $PORT"
+kill -0 "$ANVIL_PID" 2>/dev/null || fail "anvil exited (could it bind port $PORT?)"
 log() { printf '%s\n' "$*" >>"$EVIDENCE"; }
 # json_field <name>: first string value of that field in pretty or compact JSON on stdin
 json_field() { sed -n "s/.*\"$1\": *\"\([^\"]*\)\".*/\1/p" | head -n 1; }
@@ -135,7 +151,7 @@ expect_revert "refund completed job" "Job not refundable" "$CREATOR_KEY" 'refund
 expect_revert "reveal A again" "Already revealed" "$A_KEY" 'revealResult(string,bytes32,uint256,bytes32)' \
     success "$AGREED" 2 "$(salt success A)"
 
-# Balance deltas net of each claimant's own gas, so the payout itself is exact.
+# Balance change plus each claimant's own gas recovers the exact contract transfer.
 gas_cost() {
     local receipt used price
     receipt=$(cast receipt "$1" --rpc-url "$RPC" --json)
@@ -149,11 +165,13 @@ PAID_B=$(($(balance "$B") - B_BEFORE + $(gas_cost "$CLAIM_B")))
 [ "$PAID_B" = $((PRICE - PRICE / 2)) ] || fail "provider B was paid $PAID_B"
 [ "$(balance "$CONTRACT")" = 0 ] || fail "funds left in contract after claims"
 log ""
-log "Status Complete. Accepted digest \`$AGREED\`, 2/$ITEMS correct."
-log "Payouts net of claim gas: A $PAID_A wei, B $PAID_B wei (B takes the odd wei). Contract balance 0 wei."
+log "Status Complete. Accepted digest \`$AGREED\` with a provider-claimed score of 2/$ITEMS"
+log "(no answer key is involved; the contract only checks that the count does not exceed the item count)."
+log "Contract transfers (balance change plus the claimant's own gas): A $PAID_A wei, B $PAID_B wei"
+log "(B takes the odd wei). Each account's balance rose by its transfer minus claim gas. Contract balance 0 wei."
 
 # --- 2. disagreement: same accuracy, different order -> no payment, refund ------------------
-table "2. Disagreement (same 2/3 accuracy, different order) refunds the creator"
+table "2. Disagreement (same claimed 2/3 score, different order) refunds the creator"
 fund_and_assign disagree
 commit_and_reveal disagree "$(digest disagree "[0,1,0]")" 2 "$(digest disagree "[1,1,2]")" 2
 [ "$(status disagree)" = 2 ] || fail "disagreement job is not Failed"
@@ -167,7 +185,7 @@ REFUNDED=$(($(balance "$CREATOR") - C_BEFORE + $(gas_cost "$REFUND")))
 [ "$REFUNDED" = "$PRICE" ] || fail "creator was refunded $REFUNDED"
 [ "$(status disagree)" = 3 ] || fail "disagreement job is not Refunded"
 log ""
-log "Status Refunded. Creator refunded $REFUNDED wei net of refund gas; no provider was paid."
+log "Status Refunded. Refund transfer $REFUNDED wei (balance change plus refund gas); no provider was paid."
 
 # --- 3. missing provider: B never commits -> refund after commit deadline ------------------
 table "3. Missing provider: refund after the commit deadline"
@@ -189,7 +207,7 @@ REFUNDED=$(($(balance "$CREATOR") - C_BEFORE + $(gas_cost "$REFUND")))
 [ "$REFUNDED" = "$PRICE" ] || fail "creator was refunded $REFUNDED"
 [ "$(status missing)" = 3 ] || fail "missing-provider job is not Refunded"
 log ""
-log "Status Refunded. Creator refunded $REFUNDED wei net of refund gas; provider A was not paid."
+log "Status Refunded. Refund transfer $REFUNDED wei (balance change plus refund gas); provider A was not paid."
 
 [ "$(balance "$CONTRACT")" = 0 ] || fail "funds left in contract"
 log ""

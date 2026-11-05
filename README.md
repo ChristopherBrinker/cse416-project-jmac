@@ -153,7 +153,7 @@ The dashboard checks Better Auth authentication on the server and waits for Conv
 
 ## CI and verification
 
-GitHub Actions uses Bun 1.4.0 and frozen installs to run lint, formatting, TypeScript checks, and unit tests. The `contracts` job runs `forge fmt --check`, `forge test`, the ABI drift check, and the Anvil settlement run (`contracts/script/e2e-settlement.sh`, uploaded as the `settlement-evidence` artifact). The `workers` job runs ruff and the full worker unittest suite. Settlement policy and the acceptance matrix are in [docs/m4](docs/m4/protocol.md). A separate build job requires repository Actions secrets `NEXT_PUBLIC_CONVEX_URL` and `NEXT_PUBLIC_CONVEX_SITE_URL`. A maintainer enables it with repository variable `INTEGRATION_BUILD_ENABLED=true`. The workflow does not deploy Convex.
+GitHub Actions uses Bun 1.4.0 and frozen installs to run lint, formatting, TypeScript checks, and unit tests. The `contracts` job runs `forge fmt --check`, `forge test`, the ABI drift check, and the Anvil settlement run (`contracts/script/e2e-settlement.sh`, uploaded as the `settlement-evidence` artifact). The `workers` job runs ruff and the full worker unittest suite. Settlement policy is in [docs/m4/protocol.md](docs/m4/protocol.md) and the acceptance matrix in [docs/m4/acceptance.md](docs/m4/acceptance.md). A separate build job requires repository Actions secrets `NEXT_PUBLIC_CONVEX_URL` and `NEXT_PUBLIC_CONVEX_SITE_URL`. A maintainer enables it with repository variable `INTEGRATION_BUILD_ENABLED=true`. The workflow does not deploy Convex.
 
 Static checks run without account credentials. Production builds, deployment-aware Convex code generation, and live authentication checks require a configured Convex deployment and environment values.
 

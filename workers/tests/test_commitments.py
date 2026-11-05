@@ -122,6 +122,7 @@ class TransactionTests(unittest.TestCase):
                     "schema_version": "3.0.0",
                     "predictions": [1, 0, 1],
                     "item_ids": ["a", "b", "c"],
+                    "choice_counts": [2, 2, 2],
                     "total": 3,
                     "correct": 2,
                     "accuracy": 2 / 3,

@@ -4,9 +4,6 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { query, mutation } from "./_generated/server";
 
-// Available providers considered per assignment, keeping the read bounded.
-const MAX_PROVIDER_CANDIDATES = 20;
-
 export const createJob = mutation({
   args: {
     benchmarkId: v.id("benchmarks"),
@@ -21,8 +18,16 @@ export const createJob = mutation({
     if (!(await ctx.db.get("models", args.modelId))) {
       return { success: false, error: "Model not found" };
     }
-    if (!(await ctx.db.get("benchmarks", args.benchmarkId))) {
+    const benchmark = await ctx.db.get("benchmarks", args.benchmarkId);
+    if (!benchmark) {
       return { success: false, error: "Benchmark not found" };
+    }
+    // Assignment records the item count on-chain; refuse before the creator can fund.
+    if (!benchmark.itemCount) {
+      return {
+        success: false,
+        error: "Benchmark has no recorded item count; re-upload it",
+      };
     }
 
     // Currently, price is fixed at 2500 wei
@@ -67,6 +72,8 @@ export const assignProviders = mutation({
     price: v.int64(),
     jobFunded_tx: v.string(),
     retry: v.boolean(),
+    // Funding wallet read from the contract; the contract rejects it as a provider.
+    creatorWallet: v.string(),
     backendKey: v.string(),
   },
   handler: async (ctx, args) => {
@@ -104,24 +111,27 @@ export const assignProviders = mutation({
       };
     }
 
-    const candidates = await ctx.db
+    const candidates = ctx.db
       .query("model_support")
       .withIndex("by_modelId_available", (q) =>
         q.eq("modelId", job.modelId).eq("available", true)
-      )
-      .take(MAX_PROVIDER_CANDIDATES);
+      );
 
     // Approval means a platform administrator set `approved` in the Convex dashboard (no app
     // mutation grants it, so providers cannot approve themselves). The job
     // creator never evaluates their own job, and two providers registered by the same user
     // or sharing a wallet are never paired, so one account cannot supply both results.
+    // Candidates are read lazily until two eligible providers are found, so ineligible
+    // rows never hide eligible ones behind a fixed limit.
+    const creatorWallet = args.creatorWallet.toLowerCase();
     const providers: Doc<"providers">[] = [];
-    for (const ms of candidates) {
+    for await (const ms of candidates) {
       const p = await ctx.db.get("providers", ms.providerId);
       const independent =
         p !== null &&
         p.approved &&
         p.userId !== job.creatorId &&
+        p.walletAddress.toLowerCase() !== creatorWallet &&
         !providers.some(
           (chosen) =>
             chosen.userId === p.userId ||

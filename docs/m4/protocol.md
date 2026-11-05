@@ -18,7 +18,7 @@ An accepted result proves:
 
 - two distinct provider wallets, chosen by the platform backend, reported identical ordered predictions and the same score;
 - those reports were bound to this chain, contract, job, provider wallet, benchmark bytes, model ID, and item count;
-- neither provider could see the other's result before committing its own.
+- neither provider could use the other's on-chain reveal: reveals open only after both commitments are recorded, and a commitment cannot be opened by another wallet. Results exchanged off-chain before committing are outside the protocol (see collusion, section 6).
 
 An accepted result does **not** prove:
 
@@ -45,7 +45,7 @@ Tests: `test_SameCorrectnessWithDifferentWrongPredictionsFails`, `test_SameAccur
 | Commitments | Yes | Transaction journals |
 | Salts | Yes, only at reveal | `<result>.salt.json` until then |
 
-**Output digest.** `outputDigest = keccak256(abi.encode(bytes32 outputKey, string jobId, uint256[] predictions))`, where `outputKey = sha256("jmac-output-key-v1:" || benchmark bytes)`. The key is derived from the private benchmark bytes, so only parties who hold the benchmark (the creator and the assigned providers) can recompute it. Without the key, nobody can test candidate prediction vectors against the published digest, even for short benchmarks. Including `jobId` makes digests from repeated runs of the same model and benchmark unlinkable. The key is different from the public content hash, which is `sha256(benchmark bytes)` without the domain prefix.
+**Output digest.** `outputDigest = keccak256(abi.encode(bytes32 outputKey, string jobId, uint256[] predictions))`, where `outputKey = sha256("jmac-output-key-v1:" || benchmark bytes)`. The key is derived from the benchmark bytes, so only parties who hold the benchmark (the creator and the assigned providers) can recompute it, and without the key nobody can test candidate prediction vectors against the published digest, even for short benchmarks. This holds only while the benchmark file itself is unpredictable: if an attacker can guess or obtain the exact bytes (a public dataset, a small template with few variants), they can derive the key and test predictions. Benchmarks that must stay private therefore need unguessable content; an independently generated secret key would remove this assumption and is a possible follow-up. Including `jobId` makes digests from repeated runs of the same model and benchmark unlinkable. The key is different from the public content hash, which is `sha256(benchmark bytes)` without the domain prefix.
 
 **Privacy statement for the report.** Questions, answer keys, predictions and per-item correctness stay off-chain. The chain holds commitments, salts after reveal, one keyed output digest per provider, the correct count, the item count, the spec hash, and the provider wallets and IDs. The aggregate score is public by design. Do not describe the score or the provider identities as private.
 
@@ -107,12 +107,12 @@ Opening the output digest (showing the predictions behind it) requires a provide
 
 If the team later adds fallback, these must be specified before coding: when the third provider is assigned and its deadline; which matching pair is accepted; whether late results from the original pair are still accepted; whether the disagreeing provider is paid; and when the creator becomes eligible for a refund. **Needs sign-off: team.**
 
-Duplicate events, restarts and replays are safe because every state change is guarded on-chain: commit, reveal, claim and refund each revert on repetition, and the worker journals each signed transaction before broadcasting and rebroadcasts only identical bytes (section 7 of `acceptance.md`).
+Duplicate events, restarts and replays are safe because every state change is guarded on-chain: commit, reveal, claim and refund each revert on repetition, and the worker journals each signed transaction before broadcasting and rebroadcasts only identical bytes (recovery scenario S4 in [acceptance.md](acceptance.md#32-scenarios); worker journals in [workers/README.md](../workers/README.md)). The scheduler does not replay historical events after a restart; that is a known gap (R11).
 
 ## 6. Provider independence
 
 - **Approval** means a platform administrator set `providers.approved = true` in the Convex dashboard. No application mutation sets it, so a provider cannot approve itself.
-- **Self-evaluation.** The scheduler mutation `job.assignProviders` never selects a provider registered by the job creator's account. On-chain, `assignProviders` reverts with `Creator cannot provide` if either provider wallet is the creator's funding wallet.
+- **Self-evaluation.** The scheduler mutation `job.assignProviders` never selects a provider registered by the job creator's account, or one whose wallet is the funding wallet the scheduler reads from the contract. On-chain, `assignProviders` reverts with `Creator cannot provide` if either provider wallet is the creator's funding wallet.
 - **One operator, several identities.** The same mutation never pairs two providers registered by the same user, or two providers using the same wallet address. The contract additionally requires distinct wallets.
 - **What this does not stop.** One person can register two accounts with two wallets and get both approved, or two operators can collude off-chain. Administrator approval is the only check against this. Matching submissions therefore prove agreement between two approved identities, not honest or independent execution. This is the residual collusion assumption and must be stated in the report.
 
