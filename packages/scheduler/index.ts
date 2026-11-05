@@ -239,6 +239,8 @@ async function main() {
         price,
         jobFunded_tx,
         retry,
+        commitDeadline: Date.now() + COMMIT_WINDOW * 1000,
+        revealDeadline: Date.now() + (COMMIT_WINDOW + REVEAL_WINDOW) * 1000,
         backendKey: BACKEND_CONVEX_KEY,
       }
     );

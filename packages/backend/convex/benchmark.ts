@@ -148,6 +148,7 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
   const name = String(benchmark.name);
   const description = String(benchmark.description);
   const version = String(benchmark.version);
+  const itemCount = BigInt(benchmark.items.length);
 
   const strUint8 = new TextEncoder().encode(benchmarkStr);
   const hashBuffer = await crypto.subtle.digest("SHA-256", strUint8);
@@ -168,6 +169,7 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
         name,
         description,
         version,
+        itemCount,
         contentHash,
       }
     );
@@ -217,6 +219,7 @@ export const createBenchmarkEntry = internalMutation({
     name: v.string(),
     description: v.string(),
     version: v.string(),
+    itemCount: v.int64(),
     contentHash: v.string(),
   },
   handler: async (ctx, args) => {

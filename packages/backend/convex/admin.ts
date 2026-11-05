@@ -12,7 +12,7 @@ import { normalizeWalletAddress } from "./lib/wallet";
 */
 
 export const addModel = internalMutation({
-  args: { name: v.string() },
+  args: { name: v.string(), settings: v.string() },
   handler: async (ctx, args) => {
     const name = args.name.trim();
     if (name.length === 0) {
@@ -23,7 +23,10 @@ export const addModel = internalMutation({
       .query("models")
       .withIndex("by_name", (q) => q.eq("name", name))
       .first();
-    return existing?._id ?? (await ctx.db.insert("models", { name }));
+    return (
+      existing?._id ??
+      (await ctx.db.insert("models", { name, settings: args.settings }))
+    );
   },
 });
 

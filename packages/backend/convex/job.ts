@@ -62,6 +62,8 @@ export const assignProviders = mutation({
     jobId: v.id("jobs"),
     price: v.int64(),
     jobFunded_tx: v.string(),
+    commitDeadline: v.number(),
+    revealDeadline: v.number(),
     retry: v.boolean(),
     backendKey: v.string(),
   },
@@ -90,6 +92,8 @@ export const assignProviders = mutation({
       status: "funded",
       statusTime: Date.now(),
       jobFunded_tx: args.jobFunded_tx,
+      commitDeadline: args.commitDeadline,
+      revealDeadline: args.revealDeadline,
     });
 
     // This will be turned into a sensible algorithm later
@@ -255,7 +259,42 @@ export const getJobsForProvider = query({
         q.eq("providerId", provider._id).eq("finished", false)
       )
       .collect();
-    return job_assignments;
+    const ret = await Promise.all(
+      job_assignments.map(async (ja) => {
+        const job = await ctx.db.get("jobs", ja.jobId);
+        if (!job) {
+          return null;
+        }
+        const benchmark = await ctx.db.get("benchmarks", job.benchmarkId);
+        const model = await ctx.db.get("models", job.modelId);
+        if (!benchmark || !model) {
+          return null;
+        }
+
+        const modelSettings = JSON.parse(model.settings);
+
+        const specification = {
+          ...modelSettings,
+          benchmark_id: benchmark._id,
+          benchmark_version: benchmark.version,
+          benchmark_sha256: benchmark.contentHash,
+          item_count: Number(benchmark.itemCount),
+          commit_deadline: job.commitDeadline,
+          reveal_deadline: job.revealDeadline,
+          chain_id: Number(process.env.CHAIN_ID),
+          contract_address: process.env.CONTRACT_ADDRESS,
+        };
+        return {
+          _id: ja._id,
+          modelId: ja.modelId,
+          jobId: ja.jobId,
+          providerId: ja.providerId,
+          finished: ja.finished,
+          specification,
+        };
+      })
+    );
+    return ret;
   },
 });
 
