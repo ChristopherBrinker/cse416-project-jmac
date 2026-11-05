@@ -6,7 +6,9 @@ import { normalizeWalletAddress } from "./lib/wallet";
 /*
   Administrator operations. These are internal functions, so they cannot be
   called from the browser; run them with deployment credentials, e.g.
-    bunx convex run admin:addModel '{"name": "SmolLM2-135M-Instruct"}'
+    bunx convex run admin:addModel '{"name": "HuggingFaceTB/SmolLM2-135M-Instruct", "settings": "{\"model\": \"HuggingFaceTB/SmolLM2-135M-Instruct\", \"model_revision\": \"12fd25f77366fa6b3b4b768ec3050bf629380bac\", \"tokenizer_revision\": \"12fd25f77366fa6b3b4b768ec3050bf629380bac\", \"worker_sha256\": \"48601c4da741795b6c0b210698a4c593ffdf6fd1694d6744208eea375fbf325f\", \"method\": \"choice-index-log-likelihood-v1\", \"prompt_version\": \"multiple-choice-index-v1\", \"scoring\": \"ordered-choice-equality-v1\", \"device\": \"cpu\", \"dtype\": \"float32\",\"seed\": 0, \"threads\": 1, \"attention\": \"eager\", \"max_context_tokens\": 2048, \"max_seconds\": 300}"}'
+      Note that worker_sha256 changes with modification to the workers.
+      Currently, the worker includes the expected worker_sha256 as part of its output when receiving a job that mismatches
     bunx convex run admin:approveProvider '{"providerId": "<id>"}'
     bunx convex run admin:normalizeProviderWallets
 */

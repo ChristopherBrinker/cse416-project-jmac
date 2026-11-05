@@ -9,6 +9,13 @@ import {
   httpAction,
 } from "./_generated/server";
 
+// Should match workers/jmac_worker/specification.py
+const MAX_BYTES = 16 * 1024 * 1024;
+const MAX_ITEMS = 100;
+const MAX_PROMPT = 8192;
+const MAX_CHOICES = 10;
+const MAX_CHOICE = 2048;
+
 const validateBenchmark = (
   benchmark: any
 ): { success: boolean; msg: string } => {
@@ -30,6 +37,12 @@ const validateBenchmark = (
     if (!Array.isArray(items) || items.length === 0) {
       return { success: false, msg: "items must be a non-empty array" };
     }
+    if (items.length > MAX_ITEMS) {
+      return {
+        success: false,
+        msg: `items is too long (limit: ${MAX_ITEMS} members)`,
+      };
+    }
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
@@ -45,12 +58,24 @@ const validateBenchmark = (
           msg: `items[${i}].prompt must be a non-empty string`,
         };
       }
+      if (item.prompt.length > MAX_PROMPT) {
+        return {
+          success: false,
+          msg: `items[${i}].prompt is too long (limit: ${MAX_PROMPT} characters)`,
+        };
+      }
 
       const choices = item.choices;
       if (!Array.isArray(choices) || choices.length === 0) {
         return {
           success: false,
           msg: `items[${i}].choices must be a non-empty array`,
+        };
+      }
+      if (choices.length > MAX_CHOICES) {
+        return {
+          success: false,
+          msg: `items[${i}].choices is too long (limit: ${MAX_CHOICES} members)`,
         };
       }
 
@@ -73,6 +98,12 @@ const validateBenchmark = (
           return {
             success: false,
             msg: `items[${i}].choices[${j}] must be a non-empty string`,
+          };
+        }
+        if (choice.length > MAX_CHOICE) {
+          return {
+            success: false,
+            msg: `items[${i}].choices[${j}] is too long (limit: ${MAX_CHOICE} characters)`,
           };
         }
       }
@@ -114,6 +145,19 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
         Vary: "origin",
       }),
     });
+  }
+  if (blob.size > MAX_BYTES) {
+    return new Response(
+      JSON.stringify({ error: `File too big (limit: ${MAX_BYTES} bytes)` }),
+      {
+        status: 400,
+        headers: new Headers({
+          "Access-Control-Allow-Origin": siteUrl,
+          "Content-Type": "application/json",
+          Vary: "origin",
+        }),
+      }
+    );
   }
 
   let benchmark;
