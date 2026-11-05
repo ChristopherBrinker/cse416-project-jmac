@@ -14,7 +14,12 @@ from unittest.mock import patch
 from jmac_worker.__main__ import main
 from jmac_worker.benchmark import load_benchmark
 from jmac_worker.output import atomic_output
-from jmac_worker.scoring import is_valid_saved_evaluation, score_benchmark
+from jmac_worker.scoring import (
+    is_valid_saved_evaluation,
+    load_saved_evaluation,
+    saved_benchmark_path,
+    score_benchmark,
+)
 
 WORKERS_DIRECTORY = Path(__file__).resolve().parents[1]
 BENCHMARK_PATH = WORKERS_DIRECTORY / "examples" / "benchmark.json"
@@ -210,6 +215,24 @@ class ScoringTests(unittest.TestCase):
             with self.subTest(field=field, value=value):
                 changed = {**document, field: value}
                 self.assertFalse(is_valid_saved_evaluation(changed, self.benchmark))
+
+    def test_deeply_nested_saved_files_are_invalid_not_fatal(self) -> None:
+        nested = b"[" * 100_000 + b"]" * 100_000
+        document = score_benchmark(self.benchmark, [1, 0, 1]).to_dict()
+        document["inference"] = {"revision": "pinned"}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.json"
+            benchmark_copy = saved_benchmark_path(path)
+            for result, benchmark in (
+                (nested, BENCHMARK_PATH.read_bytes()),
+                (json.dumps(document).encode(), nested),
+            ):
+                path.write_bytes(result)
+                benchmark_copy.write_bytes(benchmark)
+                self.assertIsNone(load_saved_evaluation(path))
+            path.write_bytes(json.dumps(document).encode())
+            benchmark_copy.write_bytes(BENCHMARK_PATH.read_bytes())
+            self.assertEqual(load_saved_evaluation(path), document)
 
     def test_scores_are_booleans_in_memory_and_json(self) -> None:
         result = score_benchmark(self.benchmark, [1, 0, 1])

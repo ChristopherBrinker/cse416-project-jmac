@@ -81,11 +81,46 @@ def saved_benchmark_path(result_path: Path) -> Path:
     return result_path.with_suffix(".benchmark.json")
 
 
+def _is_committed_legacy_result(document: object) -> bool:
+    """Shape needed to recompute a commitment; the journal and chain pin its values."""
+    if (
+        not isinstance(document, dict)
+        or document.get("schema_version") != RESULT_SCHEMA_VERSION
+    ):
+        return False
+    benchmark = document.get("benchmark")
+    predictions = document.get("predictions")
+    return (
+        isinstance(benchmark, dict)
+        and all(
+            isinstance(benchmark.get(field), str)
+            for field in ("content_hash", "output_key")
+        )
+        and isinstance(predictions, list)
+        and type(document.get("correct")) is int
+        and document.get("total") == len(predictions)
+    )
+
+
 def load_saved_evaluation(result_path: Path) -> dict | None:
-    """Load a saved result only if it matches the benchmark copy saved beside it."""
+    """Load a saved result only if it matches the benchmark copy saved beside it.
+
+    Results committed before the copy existed are kept so they can still be
+    revealed and claimed. Their commit journal and the on-chain commitment pin
+    the digest and count, so any edit fails the commitment checks, and a
+    journaled result is never committed afresh.
+    """
+    benchmark_path = saved_benchmark_path(result_path)
     try:
         document = json.loads(result_path.read_bytes())
-        benchmark = parse_benchmark(saved_benchmark_path(result_path).read_bytes())
-    except (OSError, ValueError):
+        if (
+            not benchmark_path.exists()
+            and result_path.with_suffix(".commit.json").exists()
+        ):
+            return document if _is_committed_legacy_result(document) else None
+        benchmark = parse_benchmark(benchmark_path.read_bytes())
+        valid = is_valid_saved_evaluation(document, benchmark)
+    # Deeply nested JSON raises RecursionError rather than ValueError.
+    except (OSError, ValueError, RecursionError):
         return None
-    return document if is_valid_saved_evaluation(document, benchmark) else None
+    return document if valid else None

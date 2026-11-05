@@ -559,6 +559,32 @@ class SettlementTests(unittest.TestCase):
         self.assertEqual(self.eth.send_raw_transaction.call_args.args[0], old_raw)
         self.assertFalse(next_path.with_suffix(".commit.json").exists())
 
+    def commit_without_benchmark_copy(self):
+        # Results committed before the benchmark copy existed.
+        self.provider[2] = bytes(32)
+        self.client.submit(self.path)
+        self.eth.get_transaction_receipt.side_effect = None
+        self.eth.get_transaction_receipt.return_value = {"status": 1, "blockNumber": 5}
+        self.provider[2] = self.commitment()
+        saved_benchmark_path(self.path).unlink()
+
+    def test_committed_result_without_benchmark_copy_can_reveal(self):
+        self.commit_without_benchmark_copy()
+        self.emit("CommitComplete")
+        self.client.advance(self.path)
+        self.functions.revealResult.assert_called_once_with(
+            "job", RESULT_DIGEST, CORRECT, self.salt()
+        )
+        self.functions.commitResult.return_value.build_transaction.assert_called_once()
+
+    def test_committed_result_without_benchmark_copy_is_still_pinned(self):
+        self.commit_without_benchmark_copy()
+        self.path.write_text(json.dumps(saved_result([1, 1, 1])))
+        self.emit("CommitComplete")
+        with self.assertRaisesRegex(ValueError, "conflicts with saved result"):
+            self.client.advance(self.path)
+        self.functions.revealResult.assert_not_called()
+
     def test_removed_assignment_rebroadcasts_existing_commit_journal(self):
         self.provider[2] = bytes(32)
         self.client.submit(self.path)
