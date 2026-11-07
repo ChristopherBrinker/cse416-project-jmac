@@ -21,8 +21,8 @@ export const createJob = mutation({
       return { success: false, error: "Benchmark not found" };
     }
 
-    // Currently, price is fixed at 2500 wei
-    const price = 2500n;
+    // Currently, price is fixed at 500,000,000,000,000 wei (.0005 ETH)
+    const price = 500_000_000_000_000n;
 
     const jobId = await ctx.db.insert("jobs", {
       creatorId: identity.subject,

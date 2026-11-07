@@ -2,6 +2,7 @@ import type {
   Doc,
   Id,
 } from "@cse416-project-jmac/backend/convex/_generated/dataModel";
+import { formatEther } from "viem";
 
 export type Benchmark = Pick<
   Doc<"benchmarks">,
@@ -43,8 +44,9 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
 
 export const formatDateTime = (value: number): string =>
   `${dateTimeFormatter.format(new Date(value))} UTC`;
-export const formatWei = (value: bigint): string =>
-  `${value.toLocaleString("en-US")} wei`;
+/*export const formatWei = (value: bigint): string =>
+  `${value.toLocaleString("en-US")} wei`;*/
+export const formatWei = (value: bigint): string => `${formatEther(value)} ETH`;
 const scoreFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 1,
 });

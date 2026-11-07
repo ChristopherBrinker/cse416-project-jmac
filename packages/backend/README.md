@@ -183,16 +183,16 @@ For HTTP actions that require authentication, make sure to set `Authorization: B
 
 ## Benchmark File Format
 
-A benchmark is a JSON file consisting of a single object. The properties of this object are:
+A benchmark is a JSON file consisting of a single object. The file size limit is 16 KB. The properties of this object are:
 
 - `schema_version` - currently, must always have the value `"1.0.0"`. Meant to represent the version of the benchmark format
 - `name` - `string` representing the name of the benchmark, visible to general users. Must be non-empty
 - `description` - `string` description of the benchmark, visible to general users. May be empty but not `null`
 - `version` - `string` used to distinguish among one's benchmarks with the same name, visible to general users. May be empty. There is currently no enforced format for this field
-- `items` - a non-empty array of benchmark items. NOT visible to anyone but the owner and currently-relevant providers. Each item has the following properties:
-  - `item_id` - `string` identifying the item. Must be non-empty. Currently no enforced format
-  - `prompt` - `string` prompt for the given item. Must be non-empty
-  - `choices` - non-empty array of non-empty `string`s
+- `items` - a non-empty array of benchmark items. NOT visible to anyone but the owner and currently-relevant providers. Max length is 100. Each item has the following properties:
+  - `item_id` - `string` identifying the item. Must be non-empty and unique among all items in the benchmark
+  - `prompt` - `string` prompt for the given item. Must be non-empty. Max length is 8192 characters
+  - `choices` - non-empty array of non-empty `string`s. Max length is 10. Max length of each choice is 2048 characters
   - `correct_choice` - integer representing the correct answer in `choices`. Must be a valid array index (between 0 and choices.length-1, inclusive)
 
 ## Quick Testing from Client

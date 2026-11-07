@@ -103,6 +103,8 @@ To fund jobs, connect a browser wallet such as MetaMask. Import an Anvil test ac
 
 To set up providers, see [workers/README.md](workers/README.md).
 
+For the benchmark format specification, see the [backend guide](packages/backend/README.md#benchmark-file-format).
+
 ## Account configuration
 
 Authentication runs entirely in Convex using `@convex-dev/better-auth`; its component stores users, password accounts, and sessions in Convex. No additional database or auth service is needed. There are no existing accounts to migrate.

@@ -44,6 +44,8 @@ const validateBenchmark = (
       };
     }
 
+    const ids = new Set<string>();
+
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (typeof item.item_id !== "string" || item.item_id.length === 0) {
@@ -52,6 +54,14 @@ const validateBenchmark = (
           msg: `items[${i}].item_id must be a non-empty string`,
         };
       }
+      if (ids.has(item.item_id)) {
+        return {
+          success: false,
+          msg: `items[${i}].item_id is not unique`,
+        };
+      }
+      ids.add(item.item_id);
+
       if (typeof item.prompt !== "string" || item.prompt.length === 0) {
         return {
           success: false,
