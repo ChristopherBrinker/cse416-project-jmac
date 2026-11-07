@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { setTimeout as sleep } from "node:timers/promises";
 
 import "dotenv/config";
 import { api } from "@cse416-project-jmac/backend/convex/_generated/api";
@@ -13,6 +14,8 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { foundry } from "viem/chains";
 
+import { specHash } from "./spec";
+
 interface SolidityEvent {
   eventName: string;
   args: any;
@@ -22,11 +25,16 @@ interface struct_provider {
   addr: string;
   id: string;
   commit: string;
-  result: boolean[];
+  outputDigest: string;
   flag: boolean;
   revealed: boolean;
   claimed: boolean;
+  correctCount: bigint;
 }
+const CHAIN_READ_ATTEMPTS = 3;
+const CHAIN_READ_RETRY_MS = 2000;
+const CHAIN_READ_FAILED = "Chain read failed";
+
 type struct_job = [
   // creatorAddr
   string,
@@ -44,7 +52,18 @@ type struct_job = [
   number,
   // commitDeadline
   bigint,
+  // specHash
+  string,
+  // itemCount
+  bigint,
 ];
+
+const JOB_STATUS_COMPLETE = 1;
+const JOB_STATUS_REFUNDED = 3;
+
+// The accepted score is derived only from the agreed on-chain count, never from mutable records.
+const percentScore = (correctCount: bigint, itemCount: bigint): number =>
+  (Number(correctCount) / Number(itemCount)) * 100;
 
 async function main() {
   if (!process.env.BACKEND_WALLET_PRIVATE_KEY) {
@@ -152,18 +171,11 @@ async function main() {
                 const providerBCommitted = providerB.commit !== EMPTY_COMMIT;
                 if (providerACommitted && providerBCommitted) {
                   if (providerA.revealed && providerB.revealed) {
-                    if (job[6] === 1) {
+                    if (job[6] === JOB_STATUS_COMPLETE) {
                       status = "succeeded";
                       endStateA = "succeeded";
                       endStateB = "succeeded";
-                      const scores = job[3].result;
-                      let correct = 0;
-                      for (const s of scores) {
-                        if (s) {
-                          correct++;
-                        }
-                      }
-                      score = (correct / scores.length) * 100;
+                      score = percentScore(providerA.correctCount, job[9]);
                     } else {
                       status = "failed";
                       endStateA = "disagreement";
@@ -226,12 +238,37 @@ async function main() {
     1000 * 60 * 2
   );
 
+  // Returns undefined if the RPC keeps failing; the caller retries the whole assignment.
+  async function readCreatorWallet(jobId: Id<"jobs">) {
+    for (let attempt = 1; attempt <= CHAIN_READ_ATTEMPTS; attempt += 1) {
+      try {
+        const [creatorWallet] = (await publicClient.readContract({
+          address: CONTRACT_ADDRESS,
+          abi,
+          functionName: "jobs",
+          args: [jobId],
+        })) as struct_job;
+        return creatorWallet;
+      } catch (error) {
+        console.log(`Reading job ${jobId} failed (attempt ${attempt}):`, error);
+        await sleep(CHAIN_READ_RETRY_MS);
+      }
+    }
+  }
+
   async function assignProviders(
     jobId: Id<"jobs">,
     price: bigint,
     jobFunded_tx: string,
     retry: boolean
   ) {
+    // The contract refuses the creator as a provider, so exclude its wallet before Convex
+    // records an assignment that could never reach the chain. Convex is untouched if this
+    // read fails, so the job stays "created" and the caller retries as a first attempt.
+    const creatorWallet = await readCreatorWallet(jobId);
+    if (!creatorWallet) {
+      return { success: false, error: CHAIN_READ_FAILED } as const;
+    }
     const providerAssignment = await convexClient.mutation(
       api.job.assignProviders,
       {
@@ -241,6 +278,7 @@ async function main() {
         retry,
         commitDeadline: Date.now() + COMMIT_WINDOW * 1000,
         revealDeadline: Date.now() + (COMMIT_WINDOW + REVEAL_WINDOW) * 1000,
+        creatorWallet,
         backendKey: BACKEND_CONVEX_KEY,
       }
     );
@@ -253,7 +291,11 @@ async function main() {
     if (!providerAssignment.providers) {
       return providerAssignment;
     }
-    const providers = providerAssignment.providers;
+    const { providers, spec } = providerAssignment;
+    if (!spec?.itemCount) {
+      console.log(`Missing evaluation spec for ${jobId}`);
+      return providerAssignment;
+    }
 
     const { request } = await publicClient.simulateContract({
       account,
@@ -266,6 +308,8 @@ async function main() {
         providers[0]._id,
         providers[1].walletAddress,
         providers[1]._id,
+        specHash(spec.contentHash, spec.modelId),
+        BigInt(spec.itemCount),
       ],
     });
     const hash = await walletClient.writeContract(request);
@@ -294,14 +338,21 @@ async function main() {
               log.transactionHash,
               false
             );
-            if (!result.success && result.error === "Providers unavailable") {
+            // "Providers unavailable" leaves the job funded in Convex; a failed chain read
+            // leaves it untouched. Both are retried once a minute later.
+            const retryable =
+              !result.success &&
+              (result.error === "Providers unavailable" ||
+                result.error === CHAIN_READ_FAILED);
+            if (retryable) {
+              const alreadyFunded = result.error === "Providers unavailable";
               setTimeout(async () => {
                 try {
                   await assignProviders(
                     jobId,
                     price,
                     log.transactionHash,
-                    true
+                    alreadyFunded
                   );
                 } catch {
                   /* */
@@ -318,7 +369,7 @@ async function main() {
               args: [jobId],
             })) as struct_job;
 
-            if (job[6] === 3) {
+            if (job[6] === JOB_STATUS_REFUNDED) {
               continue;
             }
 
@@ -343,14 +394,10 @@ async function main() {
             console.log(`Updated ${jobId} status to failed`);
           } else if (decoded.eventName === "JobComplete") {
             const jobId = decoded.args.jobId as Id<"jobs">;
-            const scores = decoded.args.scores as boolean[];
-            let correct = 0;
-            for (const s of scores) {
-              if (s) {
-                correct++;
-              }
-            }
-            const score = (correct / scores.length) * 100;
+            const score = percentScore(
+              decoded.args.correctCount as bigint,
+              decoded.args.itemCount as bigint
+            );
 
             const statusResult = await convexClient.mutation(
               api.job.setStatus,

@@ -15,7 +15,8 @@ const provider = (
   commit: undefined,
   revealed: true,
   claimed: false,
-  result: [],
+  outputDigest: undefined,
+  correctCount: 0,
   ...overrides,
 });
 
@@ -25,6 +26,8 @@ const chainJob = (overrides: Partial<OnChainJob> = {}): OnChainJob => ({
   price: 2500n,
   status: "failed",
   providers: [provider(), provider()],
+  specHash: `0x${"0".repeat(64)}`,
+  itemCount: 3,
   commitDeadline: 1000,
   revealDeadline: 1150,
   chainTime: 900,

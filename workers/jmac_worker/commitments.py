@@ -1,6 +1,7 @@
-"""Sign score commitments and reconcile durable transactions before resubmission."""
+"""Sign result commitments and reconcile durable transactions before resubmission."""
 
 import json
+import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -8,15 +9,19 @@ from urllib.parse import urlsplit, urlunsplit
 
 from .output import atomic_output
 from .provider_api import validate_deployment_url
-from .scoring import is_valid_saved_evaluation
+from .scoring import load_saved_evaluation
 
-ENCODING = "keccak256-abi-bool-array-v1"
+# v3: commit to a keyed digest of ordered predictions plus the correct count (docs/m4).
+ENCODING = "keccak256-abi-bound-salted-output-digest-v3"
 ZERO_COMMIT = bytes(32)
 EVENT_BLOCK_RANGE = 2000
 OPEN = 0
 COMPLETE = 1
 FAILED = 2
 REFUNDED = 3
+# Positions in the contract's jobs() tuple, which only ever appends fields.
+JOB_SPEC_HASH = 8
+JOB_ITEM_COUNT = 9
 
 
 @dataclass(frozen=True)
@@ -67,17 +72,82 @@ def chain_config_from_environment(environment: Mapping[str, str]) -> ChainConfig
     )
 
 
-def score_commitment(scores: object) -> bytes:
+def spec_hash(content_hash: str, model_id: str) -> bytes:
+    """Identify the evaluated benchmark file and model, as the scheduler records on-chain."""
+    from eth_abi import encode
+    from web3 import Web3
+
+    return bytes(Web3.keccak(encode(["string", "string"], [content_hash, model_id])))
+
+
+def output_digest(key: bytes, job_id: str, predictions: object) -> bytes:
+    """Identify the ordered predicted choice indices without publishing them.
+
+    Both honest providers derive the same key from the benchmark bytes, so equal digests mean
+    equal ordered predictions. Without the benchmark, nobody can enumerate predictions.
+    """
     from eth_abi import encode
     from web3 import Web3
 
     if (
-        not isinstance(scores, list)
-        or not scores
-        or any(type(score) is not bool for score in scores)
+        not isinstance(predictions, list)
+        or not predictions
+        or any(type(index) is not int or index < 0 for index in predictions)
     ):
-        raise ValueError("Commitment requires a nonempty ordered boolean score array")
-    return bytes(Web3.keccak(encode(["bool[]"], [scores])))
+        raise ValueError("Output digest requires nonempty ordered choice indices")
+    if len(key) != 32:
+        raise ValueError("Output digest key must be 32 bytes")
+    return bytes(
+        Web3.keccak(
+            encode(["bytes32", "string", "uint256[]"], [key, job_id, predictions])
+        )
+    )
+
+
+def result_commitment(
+    chain_id: int,
+    contract_address: str,
+    job_id: str,
+    provider_address: str,
+    spec: bytes,
+    item_count: int,
+    digest: bytes,
+    correct_count: int,
+    salt: bytes,
+) -> bytes:
+    """Match Evaluation.resultCommitment: bind the result to chain, contract, job, provider, spec."""
+    from eth_abi import encode
+    from web3 import Web3
+
+    if len(spec) != 32 or len(digest) != 32 or len(salt) != 32:
+        raise ValueError("Commitment spec, digest and salt must be 32 bytes")
+    if type(item_count) is not int or item_count <= 0:
+        raise ValueError("Commitment requires a positive item count")
+    if type(correct_count) is not int or not 0 <= correct_count <= item_count:
+        raise ValueError("Commitment correct count must be within the item count")
+    types = [
+        "uint256",
+        "address",
+        "string",
+        "address",
+        "bytes32",
+        "uint256",
+        "bytes32",
+        "uint256",
+        "bytes32",
+    ]
+    values = [
+        chain_id,
+        contract_address,
+        job_id,
+        provider_address,
+        spec,
+        item_count,
+        digest,
+        correct_count,
+        salt,
+    ]
+    return bytes(Web3.keccak(encode(types, values)))
 
 
 class CommitmentClient:
@@ -111,23 +181,13 @@ class CommitmentClient:
             raise ValueError("RPC chain ID does not match JMAC_CHAIN_ID")
         if not self.web3.eth.get_code(self.contract_address):
             raise ValueError("No contract deployed at JMAC_CONTRACT_ADDRESS")
-        result = json.loads(result_path.read_bytes())
-        if not is_valid_saved_evaluation(result):
+        result = load_saved_evaluation(result_path)
+        if result is None:
             raise ValueError(
                 "Saved assignment result is invalid; inspect the results directory"
             )
         assignment = result["assignment"]
-        if assignment.get("specification"):
-            from .specification import validate_specification
-
-            spec = json.loads(assignment["specification"])
-            validate_specification(spec, eligible=False, supported=False)
-            if (
-                spec["chain_id"] != self.config.chain_id
-                or spec["contract_address"].lower() != self.contract_address.lower()
-            ):
-                raise ValueError("Assignment chain identity mismatch")
-        digest = score_commitment(result["scores"])
+        self._check_assignment_identity(assignment)
         job = self.contract.functions.jobs(assignment["job_id"]).call()
         if not job[5] or not job[3][4] or not job[4][4]:
             return False
@@ -138,9 +198,11 @@ class CommitmentClient:
             raise ValueError(
                 "Registered on-chain provider does not match worker signer"
             )
-        if bytes(provider[2]) != ZERO_COMMIT:
+        committed = bytes(provider[2]) != ZERO_COMMIT
+        digest = self._commitment(result_path, result, job, create_salt=not committed)
+        if committed:
             if bytes(provider[2]) != digest:
-                raise ValueError("On-chain commitment conflicts with saved scores")
+                raise ValueError("On-chain commitment conflicts with saved result")
             return True
 
         return self._transact(
@@ -148,27 +210,100 @@ class CommitmentClient:
             result,
             "commit",
             self.contract.functions.commitResult(assignment["job_id"], digest),
+            digest,
         )
 
+    def _check_assignment_identity(self, assignment: dict) -> None:
+        """A signed assignment specification, when present, must name this chain and contract."""
+        if not assignment.get("specification"):
+            return
+        from .specification import validate_specification
+
+        spec = json.loads(assignment["specification"])
+        validate_specification(spec, eligible=False, supported=False)
+        if (
+            spec["chain_id"] != self.config.chain_id
+            or spec["contract_address"].lower() != self.contract_address.lower()
+        ):
+            raise ValueError("Assignment chain identity mismatch")
+
+    def _commitment(
+        self, result_path: Path, result: dict, job: list, *, create_salt: bool
+    ) -> bytes:
+        """Refuse to commit to a spec or length the worker did not evaluate."""
+        assignment = result["assignment"]
+        spec = bytes(job[JOB_SPEC_HASH])
+        if job[JOB_ITEM_COUNT] != len(result["predictions"]):
+            raise ValueError("Saved result does not match the on-chain item count")
+        expected = spec_hash(
+            result["benchmark"]["content_hash"], assignment["model_id"]
+        )
+        if spec != expected:
+            raise ValueError(
+                "On-chain evaluation spec does not match the evaluated benchmark and model"
+            )
+        return result_commitment(
+            self.config.chain_id,
+            self.contract_address,
+            assignment["job_id"],
+            self.address,
+            spec,
+            job[JOB_ITEM_COUNT],
+            self._output_digest(result),
+            result["correct"],
+            self._salt(result_path, assignment, create=create_salt),
+        )
+
+    @staticmethod
+    def _output_digest(result: dict) -> bytes:
+        return output_digest(
+            bytes.fromhex(result["benchmark"]["output_key"]),
+            result["assignment"]["job_id"],
+            result["predictions"],
+        )
+
+    def _salt(self, result_path: Path, assignment: dict, *, create: bool) -> bytes:
+        """Keep one secret salt per result; it must survive restarts until the reveal."""
+        path = result_path.with_suffix(".salt.json")
+        identity = {
+            "chain_id": self.config.chain_id,
+            "contract_address": self.contract_address,
+            "wallet_address": self.address,
+            "job_id": assignment["job_id"],
+            "provider_id": assignment["provider_id"],
+        }
+        if path.exists():
+            saved = json.loads(path.read_bytes())
+            if saved.get("identity") != identity:
+                raise ValueError("Saved commitment salt belongs to another assignment")
+            salt = bytes.fromhex(saved["salt"])
+            if len(salt) != 32:
+                raise ValueError("Saved commitment salt is invalid")
+            return salt
+        if not create:
+            raise ValueError(
+                "Missing commitment salt; the commitment cannot be revealed"
+            )
+        salt = secrets.token_bytes(32)
+        # Persist before the commitment is signed, so a crash cannot strand a commit.
+        with atomic_output(path) as output:
+            output.write(json.dumps({"identity": identity, "salt": salt.hex()}) + "\n")
+        return salt
+
     def _transact(
-        self, result_path: Path, result: dict[str, object], phase: str, function
+        self,
+        result_path: Path,
+        result: dict[str, object],
+        phase: str,
+        function,
+        digest: bytes,
     ) -> bool:
         from eth_account import Account
         from web3 import Web3
         from web3.exceptions import TransactionNotFound
 
         assignment = result["assignment"]
-        if assignment.get("specification"):
-            from .specification import validate_specification
-
-            spec = json.loads(assignment["specification"])
-            validate_specification(spec, eligible=False, supported=False)
-            if (
-                spec["chain_id"] != self.config.chain_id
-                or spec["contract_address"].lower() != self.contract_address.lower()
-            ):
-                raise ValueError("Assignment chain identity mismatch")
-        digest = score_commitment(result["scores"])
+        self._check_assignment_identity(assignment)
         journal_path = result_path.with_suffix(f".{phase}.json")
         identity = {
             "chain_id": self.config.chain_id,
@@ -282,8 +417,8 @@ class CommitmentClient:
             raise ValueError("RPC chain ID does not match JMAC_CHAIN_ID")
         if not self.web3.eth.get_code(self.contract_address):
             raise ValueError("No contract deployed at JMAC_CONTRACT_ADDRESS")
-        result = json.loads(result_path.read_bytes())
-        if not is_valid_saved_evaluation(result):
+        result = load_saved_evaluation(result_path)
+        if result is None:
             raise ValueError("Saved assignment result is invalid")
         assignment = result["assignment"]
         if assignment.get("specification"):
@@ -311,7 +446,6 @@ class CommitmentClient:
             )
         if job[6] in (FAILED, REFUNDED) or provider[6]:
             return True
-        digest = score_commitment(result["scores"])
         if bytes(provider[2]) == ZERO_COMMIT:
             if block["timestamp"] > job[7]:
                 return True
@@ -322,8 +456,9 @@ class CommitmentClient:
                 return False
             self.submit(result_path)
             return False
+        digest = self._commitment(result_path, result, job, create_salt=False)
         if bytes(provider[2]) != digest:
-            raise ValueError("On-chain commitment conflicts with saved scores")
+            raise ValueError("On-chain commitment conflicts with saved result")
         events = self._job_events(result_path, assignment["job_id"], block["number"])
         if job[6] == COMPLETE:
             if events["JobComplete"] and provider[5]:
@@ -332,6 +467,7 @@ class CommitmentClient:
                     result,
                     "claim",
                     self.contract.functions.claimPayment(assignment["job_id"]),
+                    digest,
                 )
             return False
         if job[6] != OPEN:
@@ -348,8 +484,12 @@ class CommitmentClient:
                 result,
                 "reveal",
                 self.contract.functions.revealResult(
-                    assignment["job_id"], result["scores"]
+                    assignment["job_id"],
+                    self._output_digest(result),
+                    result["correct"],
+                    self._salt(result_path, assignment, create=False),
                 ),
+                digest,
             )
         return False
 

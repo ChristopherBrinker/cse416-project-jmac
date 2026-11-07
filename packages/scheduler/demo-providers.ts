@@ -3,19 +3,22 @@
   when the Python worker (uv + model download) is not available, so the web
   flow can be demonstrated end to end on a local Anvil chain.
 
-  It does NOT run a model or read the benchmark. It submits a fixed, labelled
-  score vector through the real contract lifecycle (commit -> reveal -> claim)
-  using the same commitment encoding as the worker:
-  keccak256(abi.encode(bool[] scores)).
+  It does NOT run a model or read the benchmark. It submits fixed, labelled
+  predictions through the real contract lifecycle (commit -> reveal -> claim)
+  using the worker's encoding (docs/m4/protocol.md): a keyed digest of the
+  ordered predictions plus the correct count, under a salted commitment that
+  the contract's resultCommitment view computes. The output key here is a
+  demo stand-in, not one derived from the benchmark bytes.
 
   Keys come from a local, git-ignored env file and must be Anvil development
   keys holding disposable test funds. Never use a real wallet here.
 
   Modes (DEMO_RESULT_MODE):
-    DEMO_SCORES (default "1,1,0") sets the reported per-item correctness.
+    DEMO_SCORES (default "1,1,0") sets the per-item correctness pattern,
+    repeated to the item count recorded on-chain at assignment.
 
-  agree     both providers reveal the same vector  -> JobComplete, then claims
-    disagree  provider B flips one item             -> JobFailed (refundable)
+    agree     both providers reveal the same digest  -> JobComplete, then claims
+    disagree  provider B changes one prediction      -> JobFailed (refundable)
     silent    nobody commits                         -> expires after COMMIT_WINDOW
 */
 import { readFile } from "node:fs/promises";
@@ -30,6 +33,7 @@ import {
   encodeAbiParameters,
   http,
   keccak256,
+  stringToHex,
 } from "viem";
 import type { Abi, Address, Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
@@ -73,15 +77,37 @@ const runAfter = async (
 const parseScores = (value: string): boolean[] =>
   value.split(",").map((item) => item.trim() === "1");
 
-const encodeCommit = (scores: readonly boolean[]): Hex =>
-  keccak256(encodeAbiParameters([{ type: "bool[]" }], [[...scores]]));
+// Demo stand-in for the benchmark-derived output key the real worker uses.
+const DEMO_OUTPUT_KEY = keccak256(stringToHex("jmac demo output key"));
+const CORRECT_CHOICE = 0n;
+const WRONG_CHOICE = 1n;
+
+/** Choice indices for the item count fixed at assignment; demo-only labels. */
+const demoPredictions = (pattern: readonly boolean[], itemCount: number) =>
+  Array.from({ length: itemCount }, (_, index) =>
+    pattern[index % pattern.length] ? CORRECT_CHOICE : WRONG_CHOICE
+  );
+
+const outputDigest = (jobId: string, predictions: readonly bigint[]): Hex =>
+  keccak256(
+    encodeAbiParameters(
+      [{ type: "bytes32" }, { type: "string" }, { type: "uint256[]" }],
+      [DEMO_OUTPUT_KEY, jobId, [...predictions]]
+    )
+  );
 
 interface SimulatedProvider {
   label: "A" | "B";
   providerId: Id<"providers">;
   secret: string;
   account: ReturnType<typeof privateKeyToAccount>;
-  scores: boolean[];
+  flipFirst: boolean;
+}
+
+interface SimulatedResult {
+  outputDigest: Hex;
+  correctCount: bigint;
+  salt: Hex;
 }
 
 // Demo settings first, then the scheduler's shared CONVEX_URL/NET_URL/etc.
@@ -107,10 +133,7 @@ async function main() {
     account: privateKeyToAccount(
       requireEnv(`DEMO_PROVIDER_${label}_KEY`) as Hex
     ),
-    scores:
-      mode === "disagree" && label === "B"
-        ? demoScores.map((score, index) => (index === 0 ? !score : score))
-        : demoScores,
+    flipFirst: mode === "disagree" && label === "B",
   }));
 
   const publicClient = createPublicClient({
@@ -179,6 +202,46 @@ async function main() {
   }, HEARTBEAT_INTERVAL_MS);
 
   const assignedTo = new Map<string, SimulatedProvider[]>();
+  // Salts stay in memory until the reveal; a restarted simulator cannot reveal.
+  const results = new Map<string, SimulatedResult>();
+  const resultKey = (jobId: string, provider: SimulatedProvider) =>
+    `${jobId}:${provider.label}`;
+
+  const prepareResult = async (
+    jobId: string,
+    provider: SimulatedProvider
+  ): Promise<Hex> => {
+    const job = (await publicClient.readContract({
+      address: contractAddress,
+      abi,
+      functionName: "jobs",
+      args: [jobId],
+    })) as readonly unknown[];
+    const pattern = provider.flipFirst
+      ? demoScores.map((score, index) => (index === 0 ? !score : score))
+      : demoScores;
+    const predictions = demoPredictions(pattern, Number(job[9]));
+    const result: SimulatedResult = {
+      outputDigest: outputDigest(jobId, predictions),
+      correctCount: BigInt(
+        predictions.filter((choice) => choice === CORRECT_CHOICE).length
+      ),
+      salt: keccak256(crypto.getRandomValues(new Uint8Array(32))),
+    };
+    results.set(resultKey(jobId, provider), result);
+    return (await publicClient.readContract({
+      address: contractAddress,
+      abi,
+      functionName: "resultCommitment",
+      args: [
+        jobId,
+        provider.account.address,
+        result.outputDigest,
+        result.correctCount,
+        result.salt,
+      ],
+    })) as Hex;
+  };
   const ours = (address: string) =>
     providers.find(
       (provider) =>
@@ -210,16 +273,21 @@ async function main() {
               for (const provider of assigned) {
                 await send(provider, "commitResult", [
                   jobId,
-                  encodeCommit(provider.scores),
+                  await prepareResult(jobId, provider),
                 ]);
               }
             }
           } else if (eventName === "CommitComplete") {
             for (const provider of assignedTo.get(jobId) ?? []) {
-              await send(provider, "revealResult", [
-                jobId,
-                [...provider.scores],
-              ]);
+              const result = results.get(resultKey(jobId, provider));
+              if (result) {
+                await send(provider, "revealResult", [
+                  jobId,
+                  result.outputDigest,
+                  result.correctCount,
+                  result.salt,
+                ]);
+              }
             }
           } else if (eventName === "JobComplete") {
             for (const provider of assignedTo.get(jobId) ?? []) {

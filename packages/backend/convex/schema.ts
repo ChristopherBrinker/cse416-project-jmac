@@ -21,6 +21,7 @@ export default defineSchema({
 
   models: defineTable({
     name: v.string(),
+    revision: v.string(),
     settings: v.string(),
   })
     .index("by_name", ["name"])

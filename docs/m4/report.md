@@ -15,24 +15,25 @@ M3 stated "No changes since M2". That was not accurate. The design changes actua
 1. **Wallet flow correction.** M2 specified wallet signing. M3 shipped a dashboard and dev sandbox that asked users to paste a raw private key, which the browser turned into an account. M4 removes that path entirely: all funding, refunds, and provider verification are signed in an injected browser wallet (MetaMask or any EIP-1193/EIP-6963 wallet) through wagmi. The app handles rejected requests, account switches, disconnection, and the wrong network. Test keys live only in the wallet's local development setup.
 2. **Provider wallet ownership.** Previously a provider typed any address. Now the backend issues a single-use challenge (account, wallet, chain ID 31337, 128-bit nonce, 5-minute expiry), the wallet signs it (EIP-191), and the backend consumes the challenge before verifying the signature, so it cannot be replayed. A wallet backs one provider, and admin approval refuses unverified wallets. _Chris to confirm the backend design; Anthony to review how this identity maps to assigned provider transactions._
 3. **Settlement is implemented on-chain.** The contract now has commit → reveal → settle with deadlines: 5 minutes to commit, then 2.5 minutes to reveal. Matching reveals complete the job and let each provider claim half. Disagreement fails it. A missed deadline makes it refundable. The creator can refund once. (`workers/INTEGRATION.md` still quotes 30/15-minute windows. The contract source is authoritative.)
-4. **Result representation.** Results are an ordered `bool[]` of per-item correctness, committed as `keccak256(abi.encode(bool[]))`. The scheduler converts the revealed vector to a percentage for Convex. Workers themselves report accuracy on a 0–1 scale, so the UI labels both.
+4. **Result representation.** _Updated by Anthony's settlement work ([protocol.md](protocol.md))._ Providers reveal a keyed digest of their ordered predicted choice indices plus the correct count, under a salted commitment bound to chain, contract, job, provider, benchmark/model spec hash and item count. No per-item data reaches the chain. The scheduler stores `correctCount / itemCount` as a percentage for Convex.
 5. **State tracking.** Convex records `jobFunded_tx`, `jobComplete_tx`, `jobFailed_tx`, `failureReason`, and per-provider `endState`. The frontend treats the contract as authoritative for escrow (funded / complete / failed / refunded) and reads it directly, so a job is never shown as refunded until the refund transaction succeeds.
 6. **Job lifecycle in the UI.** The UI now distinguishes funding pending, funding confirmed, providers assigned, commit/reveal progress with deadlines, accepted result, failure or expiry with an explanation, refund available, and refund confirmed. Accepted results show a receipt. Provider payment claims are shown separately from result acceptance.
 
 ## Policies
 
-- **Two-provider settlement (current).** Exactly two distinct approved providers per job. Payment requires identical revealed vectors; there is no tolerance. Anything else blocks payment and lets the creator refund. _Anthony to confirm._
+- **Two-provider settlement (current).** Exactly two distinct approved providers per job. Payment requires identical revealed output digests (ordered predictions) and correct counts; there is no tolerance. Anything else blocks payment and lets the creator refund. Confirmed by Anthony in [protocol.md](protocol.md).
 - **Third-provider fallback (decision).** Not implemented. Proposed: no fallback this semester. A disagreement is surfaced to the developer with an explanation and ends in a refund. _Anthony and Chris to confirm before this is presented as decided._
 - **Supported network.** Local Anvil (chain 31337) only. No public testnet deployment exists, so R4's "testnet" is met only in the local sense. _Anthony to confirm._
 - **Privacy boundary.**
   - Benchmark questions and answer keys stay in Convex storage. Only the owner and assigned providers (with a provider secret) can download them.
   - Public queries and the UI expose only metadata (name, version, description, SHA-256).
   - Receipts show no questions, answers, predictions, or per-item results.
-  - Not private: per-item correctness is public on-chain in reveals and `JobComplete`. Worker hosts can read test data by design. Provider secrets travel in a URL query string.
+  - On-chain: only commitments, salts, keyed output digests, the correct and item counts and the spec hash; per-item correctness is no longer published.
+  - Not private: worker hosts can read test data by design. Provider secrets travel in a URL query string.
 
 ## Findings for owners
 
-1. **Commitment copying (R6, security).** Anthony, Jadon. The commitment hashes only the scores, so an assigned provider can copy the other provider's commitment and later its public reveal, and both are paid for one evaluation. Reproduced with a throwaway Foundry test (below). Suggested fix: commit `keccak256(abi.encode(jobId, providerAddress, salt, scores))`, reveal the salt, and compare scores, not commitments.
+1. **Commitment copying (R6, security).** Anthony, Jadon. The commitment hashes only the scores, so an assigned provider can copy the other provider's commitment and later its public reveal, and both are paid for one evaluation. Reproduced with a throwaway Foundry test (below). Suggested fix: commit `keccak256(abi.encode(jobId, providerAddress, salt, scores))`, reveal the salt, and compare scores, not commitments. **Resolved:** commitments now bind chain, contract, job, provider, spec hash, item count and a secret salt, so a copied commitment cannot be revealed by the other provider (`test_CopiedCommitCannotBeRevealed`).
 2. **Missed events on scheduler restart (R11).** Chris. The scheduler watches from the latest block, so `JobFunded`/`JobComplete`/`JobFailed` events emitted while it is down are never processed. Persist the last processed block and backfill on start.
 3. **Capacity held after a failed assignment or early refund (R11).** Chris.
    - `job:assignProviders` marks the job funded and reserves provider capacity before the on-chain `assignProviders` call. If that call reverts (observed: "Commit deadline passed"), capacity stays reserved until the wall-clock timeout cleanup.
@@ -41,7 +42,7 @@ M3 stated "No changes since M2". That was not accurate. The design changes actua
 5. **No model revision or worker version in job data (R3/R8).** Chris, Jadon. Receipts mark these "not recorded". Add an immutable model revision and worker version to models and jobs.
 6. **Scheduler transport (minor).** Chris. The scheduler's wallet client uses `http()` without `NET_URL`, so it only works against the default `127.0.0.1:8545`.
 
-Commitment-copy probe (run from `contracts/`, then delete):
+Commitment-copy probe against the pre-M4 contract (historical; it no longer compiles against the current interface):
 
 ```solidity
 // test/CopyCommitProbe.t.sol
@@ -112,4 +113,4 @@ Automated tests: 15 lifecycle tests (web), 11 wallet-challenge tests (backend), 
 **Slide: Honest status**
 
 - Working: wallet flow, funding, settlement, receipts, disagreement and expiry refunds (local Anvil).
-- Open: commitment copying (R6), scheduler event backfill (R11), model/worker versions on receipts, duplicate item IDs, a live two-worker run, public testnet.
+- Open: scheduler event backfill (R11), model/worker versions on receipts, duplicate item IDs, a live two-worker run, public testnet.

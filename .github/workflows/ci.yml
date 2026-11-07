@@ -16,15 +16,49 @@ jobs:
       - run: bun run lint
       - run: bun run format:check
       - run: bun run check-types
+      # web, backend and scheduler unit tests (incl. the spec-hash vector shared with contract and worker)
       - run: bun run test
   contracts:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
     steps:
       # forge-std is vendored under contracts/lib, so no submodule checkout
       - uses: actions/checkout@v4
       - uses: foundry-rs/foundry-toolchain@v1
-      - run: forge test
-        working-directory: contracts
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - run: forge --version
+      - run: forge fmt --check
+      - run: forge build --sizes
+      - run: forge test -vvv
+      # frontend, scheduler and worker ABIs must match this build
+      - run: bun script/sync-abi.ts --check
+      # deploys to a local Anvil node and settles success, disagreement and timeout jobs
+      - run: bash script/e2e-settlement.sh settlement-evidence.md
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: settlement-evidence
+          path: contracts/settlement-evidence.md
+          if-no-files-found: ignore
+  workers:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers
+    env:
+      UV_CACHE_DIR: .cache/uv
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      # inference installs CPU-only PyTorch from the locked index; tests never download weights
+      - run: uv sync --extra inference --extra provider --extra chain --locked
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+      - run: uv run --no-sync python -m unittest discover -s tests -v
   build:
     runs-on: ubuntu-latest
     # Configure the repository variable after supplying the two Actions secrets.

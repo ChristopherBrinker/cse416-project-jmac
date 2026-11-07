@@ -12,6 +12,7 @@ This contains information useful for interacting with the convex backend
   - [provider](#provider)
 - [HTTP Endpoints](#http-endpoints)
 - [Benchmark File Format](#benchmark-file-format)
+- [Adding Models](#adding-models)
 - [Quick Testing from Client](#quick-testing-from-client)
 - [Setting Up Evaluations](#setting-up-evaluations)
 
@@ -194,6 +195,29 @@ A benchmark is a JSON file consisting of a single object. The file size limit is
   - `prompt` - `string` prompt for the given item. Must be non-empty. Max length is 8192 characters
   - `choices` - non-empty array of non-empty `string`s. Max length is 10. Max length of each choice is 2048 characters
   - `correct_choice` - integer representing the correct answer in `choices`. Must be a valid array index (between 0 and choices.length-1, inclusive)
+
+## Adding Models
+
+Models can be added either by using convex's browser GUI or by calling `admin:addModel`. Instructions on how to call `admin:addModel` are also detailed in `convex/admin.ts`.
+
+A model currently has three components: name (non-empty `string`), revision (`string`, may be empty), and settings. settings is a <i>stringified</i> JSON object with the following properties:
+
+- `model`: same as the specified name
+- `model_revision`: same as the specified revision
+- `tokenizer_revision`: currently the same as `model_revision`
+- `worker_sha256`: `string` output by `worker_artifact` in `/workers/jmac_worker/specification.py`
+  - The worker is currently configured to output the received and expected specification (in that order) whenever there is a property mismatch for a received assignment. Use this to determine the new correct sha256 whenever the worker is modified, or the correct values of other properties. Note you must have at least defined each property in the spec before a worker will output the expectation
+  - Current value is "73b778dd9658892c9c28b58c7204163916d6c8eb804f1a3bc0681b4e257fde39"
+- `method`: "choice-index-log-likelihood-v1"
+- `prompt_version`: "multiple-choice-index-v1"
+- `scoring`: "ordered-choice-equality-v1"
+- `device`: "cpu"
+- `dtype`: "float32"
+- `seed`: 0
+- `threads`: 1
+- `attention`: "eager"
+- `max_context_tokens`: 2048
+- `max_seconds`: MAX_SECONDS
 
 ## Quick Testing from Client
 

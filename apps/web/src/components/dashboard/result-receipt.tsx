@@ -1,11 +1,23 @@
 import { Badge } from "@cse416-project-jmac/ui/components/badge";
-import { ReceiptTextIcon, ShieldCheckIcon } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  CircleAlertIcon,
+  CircleCheckIcon,
+  ReceiptTextIcon,
+  ShieldCheckIcon,
+} from "lucide-react";
 import type { ReactNode } from "react";
+import type { Hash } from "viem";
 
-import { contractAddress, evaluationChain } from "@/lib/blockchain";
+import {
+  contractAddress,
+  evaluationChain,
+  verifyJobCompletion,
+} from "@/lib/blockchain";
 import type { OnChainJob, OnChainProvider } from "@/lib/blockchain";
 import type { EvaluationJob } from "@/lib/evaluations";
 import { formatScore } from "@/lib/evaluations";
+import { specHash } from "@/lib/settlement";
 
 import { CopyButton } from "./copy-button";
 
@@ -40,15 +52,85 @@ function NotRecorded({ owner }: { owner: string }) {
   );
 }
 
-/** Correct/total from the revealed per-item vector; only counts are shown. */
+/** Accepted correct count and the item count fixed at assignment. */
 const getItemCounts = (chainJob: OnChainJob | undefined) => {
   const revealed = chainJob?.providers.find((provider) => provider.revealed);
-  if (!revealed || revealed.result.length === 0) {
+  if (!revealed || !chainJob || chainJob.itemCount === 0) {
     return;
   }
-  const correct = revealed.result.filter(Boolean).length;
-  return { correct, total: revealed.result.length };
+  return { correct: revealed.correctCount, total: chainJob.itemCount };
 };
+
+function Check({ ok, children }: { ok: boolean; children: ReactNode }) {
+  return (
+    <li className="flex items-start gap-2">
+      {ok ? (
+        <CircleCheckIcon
+          className="mt-px size-4 shrink-0 text-emerald-500"
+          aria-label="Verified"
+        />
+      ) : (
+        <CircleAlertIcon
+          className="text-destructive mt-px size-4 shrink-0"
+          aria-label="Not verified"
+        />
+      )}
+      <span>{children}</span>
+    </li>
+  );
+}
+
+const isHash = (value: string | undefined): value is Hash =>
+  value?.startsWith("0x") === true;
+
+/** Re-checks the receipt against the contract instead of trusting Convex. */
+function ReceiptChecks({
+  job,
+  chainJob,
+}: {
+  job: EvaluationJob;
+  chainJob: OnChainJob;
+}) {
+  const [accepted] = chainJob.providers;
+  const completionTx = job.jobComplete_tx;
+  const { outputDigest, correctCount } = accepted;
+  const completion = useQuery({
+    queryKey: ["jobCompletion", job._id, completionTx, outputDigest],
+    queryFn: () =>
+      isHash(completionTx) && outputDigest
+        ? verifyJobCompletion(completionTx, job._id, outputDigest, correctCount)
+        : false,
+    enabled: isHash(completionTx) && outputDigest !== undefined,
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: 1,
+  });
+  const specMatches =
+    job.benchmark !== undefined &&
+    specHash(job.benchmark.contentHash, job.modelId) === chainJob.specHash;
+  const onChainScore =
+    chainJob.itemCount > 0
+      ? (correctCount / chainJob.itemCount) * PERCENT
+      : undefined;
+  const scoreMatches = onChainScore !== undefined && job.score === onChainScore;
+
+  return (
+    <ul className="space-y-1">
+      <Check ok={specMatches}>
+        Spec hash recomputed from the benchmark SHA-256 and model ID{" "}
+        {specMatches ? "matches the contract" : "does not match the contract"}
+      </Check>
+      <Check ok={completion.data === true}>
+        {completion.data === true
+          ? "Completion transaction emitted this job's JobComplete event"
+          : "No verified JobComplete transaction recorded yet"}
+      </Check>
+      <Check ok={scoreMatches}>
+        Dashboard score {scoreMatches ? "matches" : "differs from"} the on-chain
+        count
+      </Check>
+    </ul>
+  );
+}
 
 export function ProviderStatusList({
   providers,
@@ -121,6 +203,7 @@ export function ResultReceipt({
         : job.score / PERCENT
       : counts.correct / counts.total;
   const resultCommitment = chainJob?.providers[0].commit;
+  const outputDigest = chainJob?.providers[0].outputDigest;
   const claimedCount =
     chainJob?.providers.filter((provider) => provider.claimed).length ?? 0;
 
@@ -155,10 +238,16 @@ export function ResultReceipt({
             : ""}
         </p>
         <p className="text-muted-foreground mt-1">
-          Scale: workers score accuracy from 0 to 1; the scheduler stores it as
-          a percentage (accuracy × 100).
+          Scale: the scheduler stores the on-chain correct count divided by the
+          item count as a percentage.
+        </p>
+        <p className="text-muted-foreground mt-1">
+          Both assigned providers revealed the same digest of their ordered
+          predictions and the same count. This shows agreement between two
+          providers; it does not prove either ran the model honestly.
         </p>
       </div>
+      {chainJob ? <ReceiptChecks job={job} chainJob={chainJob} /> : null}
       <dl className="grid gap-2">
         <ReceiptRow label="Benchmark">
           {job.benchmark
@@ -175,14 +264,21 @@ export function ResultReceipt({
         ) : null}
         <ReceiptRow label="Model">{job.model?.name ?? job.modelId}</ReceiptRow>
         <ReceiptRow label="Model revision">
-          <NotRecorded owner="backend" />
-        </ReceiptRow>
-        <ReceiptRow label="Worker version">
-          <NotRecorded owner="worker/backend" />
+          {job.model?.revision ?? ""}
         </ReceiptRow>
         {resultCommitment ? (
           <ReceiptRow label="Result commitment" copyValue={resultCommitment}>
             <span className="font-mono">{resultCommitment}</span>
+          </ReceiptRow>
+        ) : null}
+        {chainJob ? (
+          <ReceiptRow label="Spec hash" copyValue={chainJob.specHash}>
+            <span className="font-mono">{chainJob.specHash}</span>
+          </ReceiptRow>
+        ) : null}
+        {outputDigest ? (
+          <ReceiptRow label="Output digest" copyValue={outputDigest}>
+            <span className="font-mono">{outputDigest}</span>
           </ReceiptRow>
         ) : null}
         {job.jobComplete_tx ? (
@@ -208,7 +304,8 @@ export function ResultReceipt({
       ) : null}
       <p className="text-muted-foreground border-t pt-2">
         This receipt contains no benchmark questions, answer keys, prediction
-        files, or per-item results.
+        files, or per-item results. The output digest is keyed by a secret
+        derived from the benchmark, so it reveals nothing about the predictions.
       </p>
     </section>
   );

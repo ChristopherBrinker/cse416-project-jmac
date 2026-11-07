@@ -13,6 +13,7 @@ from jmac_worker.benchmark import parse_benchmark
 from jmac_worker.inference import LocalModelRunner
 from jmac_worker.jobs import JobConfig, parse_assignments, result_path
 from jmac_worker.provider_api import ProviderAPIError
+from jmac_worker.scoring import saved_benchmark_path
 from jmac_worker.specification import validate_specification, verify_content
 
 
@@ -113,6 +114,7 @@ class IntegrityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             config = JobConfig("https://example.convex.site", "model", Path(directory))
             path = result_path(config, historical)
+            saved_benchmark_path(path).write_bytes(BENCHMARK)
             path.write_text(json.dumps(document))
             self.assertEqual(saved_assignments(config, "provider"), (historical,))
             self.assertTrue(has_saved_result(config, historical))
@@ -143,6 +145,7 @@ class IntegrityTests(unittest.TestCase):
                 sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
                 + ".json"
             )
+            saved_benchmark_path(original).write_bytes(BENCHMARK)
             original.write_text(json.dumps(document))
             self.assertEqual(result_path(config, legacy), original)
             self.assertEqual(saved_assignments(config, "provider"), (legacy,))

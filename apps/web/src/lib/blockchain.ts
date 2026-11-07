@@ -7,6 +7,7 @@ import {
   TransactionReceiptNotFoundError,
   UserRejectedRequestError,
   createPublicClient,
+  decodeEventLog,
   defineChain,
   http,
 } from "viem";
@@ -54,8 +55,13 @@ export interface OnChainProvider {
   commit: Hex | undefined;
   revealed: boolean;
   claimed: boolean;
-  /** Per-item correctness revealed by the provider (public on-chain). */
-  result: readonly boolean[];
+  /**
+   * Revealed keyed digest of the provider's ordered predictions; undefined
+   * before the reveal. Predictions themselves never reach the chain.
+   */
+  outputDigest: Hex | undefined;
+  /** Revealed number of correct items (0 before the reveal). */
+  correctCount: number;
 }
 
 export interface OnChainJob {
@@ -64,6 +70,10 @@ export interface OnChainJob {
   price: bigint;
   status: OnChainJobStatus;
   providers: readonly [OnChainProvider, OnChainProvider];
+  /** keccak256(abi.encode(benchmark SHA-256, model ID)), fixed at assignment. */
+  specHash: Hex;
+  /** Benchmark item count fixed at assignment and bound into each commitment. */
+  itemCount: number;
   /** Unix seconds; commits close here and reveals close REVEAL_WINDOW later. */
   commitDeadline: number;
   revealDeadline: number;
@@ -142,7 +152,8 @@ const parseProvider = (value: unknown): OnChainProvider => {
     typeof value.flag !== "boolean" ||
     typeof value.revealed !== "boolean" ||
     typeof value.claimed !== "boolean" ||
-    !Array.isArray(value.result)
+    typeof value.outputDigest !== "string" ||
+    typeof value.correctCount !== "bigint"
   ) {
     throw new TypeError(
       "Could not read this job's providers from the contract."
@@ -157,9 +168,11 @@ const parseProvider = (value: unknown): OnChainProvider => {
     commit: committed ? (value.commit as Hex) : undefined,
     revealed: value.revealed,
     claimed: value.claimed,
-    result: value.result.filter(
-      (item): item is boolean => item === true || item === false
-    ),
+    outputDigest:
+      value.revealed && value.outputDigest !== EMPTY_COMMIT
+        ? (value.outputDigest as Hex)
+        : undefined,
+    correctCount: Number(value.correctCount),
   };
 };
 
@@ -183,16 +196,28 @@ export const getOnChainJob = async (jobId: string): Promise<OnChainJob> => {
     // stamped like the next real block, which is where a refund would run.
     publicClient.getBlock({ blockTag: "pending" }),
   ]);
-  if (!Array.isArray(job) || job.length < 8) {
+  if (!Array.isArray(job) || job.length < 10) {
     throw new TypeError("Could not read this job from the contract.");
   }
-  const [creator, , price, providerA, providerB, funded, status, deadline] =
-    job as unknown[];
+  const [
+    creator,
+    ,
+    price,
+    providerA,
+    providerB,
+    funded,
+    status,
+    deadline,
+    specHash,
+    itemCount,
+  ] = job as unknown[];
   if (
     typeof creator !== "string" ||
     typeof price !== "bigint" ||
     typeof funded !== "boolean" ||
     typeof deadline !== "bigint" ||
+    typeof specHash !== "string" ||
+    typeof itemCount !== "bigint" ||
     !isStatusIndex(status)
   ) {
     throw new TypeError("Could not read this job from the contract.");
@@ -204,6 +229,8 @@ export const getOnChainJob = async (jobId: string): Promise<OnChainJob> => {
     price,
     status: ON_CHAIN_STATUSES[status],
     providers: [parseProvider(providerA), parseProvider(providerB)],
+    specHash: specHash as Hex,
+    itemCount: Number(itemCount),
     commitDeadline,
     revealDeadline: commitDeadline + revealWindow,
     chainTime: Number(block.timestamp),
@@ -219,6 +246,45 @@ export const createBrowserWallet = (
 
 export const isSameAddress = (a: string, b: string): boolean =>
   a.toLowerCase() === b.toLowerCase();
+
+/**
+ * True only when the transaction succeeded and this contract emitted
+ * JobComplete for this job with exactly this digest and count, so a recorded
+ * hash in our database cannot vouch for a different result.
+ */
+export const verifyJobCompletion = async (
+  hash: Hash,
+  jobId: string,
+  outputDigest: Hex,
+  correctCount: number
+): Promise<boolean> => {
+  const { publicClient, abi } = await getBlockchainReader();
+  const receipt = await publicClient.getTransactionReceipt({ hash });
+  if (receipt.status !== "success") {
+    return false;
+  }
+  return receipt.logs.some((log) => {
+    if (!isSameAddress(log.address, contractAddress)) {
+      return false;
+    }
+    try {
+      const decoded = decodeEventLog({
+        abi,
+        data: log.data,
+        topics: log.topics,
+      });
+      const args = decoded.args as unknown as Record<string, unknown>;
+      return (
+        decoded.eventName === "JobComplete" &&
+        args.jobId === jobId &&
+        args.outputDigest === outputDigest &&
+        args.correctCount === BigInt(correctCount)
+      );
+    } catch {
+      return false;
+    }
+  });
+};
 
 type JobContractFunction = "fundJob" | "refund";
 
