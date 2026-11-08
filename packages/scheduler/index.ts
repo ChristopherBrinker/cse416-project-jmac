@@ -277,7 +277,7 @@ async function main() {
       args: [jobId],
     })) as struct_job;
     if (!job[5]) {
-      return { success: false, error: "Job not found" } as const;
+      return { success: false, error: CHAIN_READ_FAILED } as const;
     }
 
     const commitDeadline = Number(job[7]);

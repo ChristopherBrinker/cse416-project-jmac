@@ -73,7 +73,8 @@ export default defineSchema({
   })
     .index("by_providerId_finished", ["providerId", "finished"])
     .index("by_jobId", ["jobId"])
-    .index("by_jobId_providerId_finished", ["jobId", "providerId", "finished"]),
+    .index("by_jobId_providerId_finished", ["jobId", "providerId", "finished"])
+    .index("by_modelId_finished", ["modelId", "finished"]),
 
   providers: defineTable({
     userId: v.string(),

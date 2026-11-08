@@ -75,7 +75,12 @@ def validate_specification(
     for k, v in settings.items():
         if type(value[k]) is not type(v) or (supported and value[k] != v):
             # Convex cannot send something Python can interpret as int, so attempt to cast
-            if type(v) is int and type(value[k]) is float and value[k].is_integer() and (not supported or value[k] == v):
+            if (
+                type(v) is int
+                and type(value[k]) is float
+                and value[k].is_integer()
+                and (not supported or value[k] == v)
+            ):
                 value[k] = int(value[k])
             else:
                 print(value, settings)

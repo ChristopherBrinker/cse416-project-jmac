@@ -43,6 +43,6 @@ export default defineConfig({
     "no-unused-vars": "warn",
     "no-await-in-loop": "warn",
     "no-nested-ternary": "off",
-    "preserve-caught-error": "off",
+    "preserve-caught-error": "warn",
   },
 });
