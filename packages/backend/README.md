@@ -12,6 +12,7 @@ This contains information useful for interacting with the convex backend
   - [provider](#provider)
 - [HTTP Endpoints](#http-endpoints)
 - [Benchmark File Format](#benchmark-file-format)
+- [Adding Models](#adding-models)
 - [Quick Testing from Client](#quick-testing-from-client)
 - [Setting Up Evaluations](#setting-up-evaluations)
 
@@ -73,7 +74,7 @@ This contains information useful for interacting with the convex backend
 
 Internal functions; they cannot be called from a browser. Run them with deployment credentials from `packages/backend`:
 
-- `admin:addModel` - `bunx convex run admin:addModel '{"name": "SmolLM2-135M-Instruct"}'` adds a model record
+- `admin:addModel` - `bunx convex run admin:addModel '{"name": "...", "revision": "...", "settings": "..."}'` adds a model record. See [here](#adding-models) for more details
 - `admin:approveProvider` - `bunx convex run admin:approveProvider '{"providerId": "<id>"}'` approves a provider; refuses providers whose wallet was never verified with a signed challenge
 - `admin:normalizeProviderWallets` - `bunx convex run admin:normalizeProviderWallets` checksums wallet addresses stored before signed registration so uniqueness checks ignore casing; rerun with the returned `cursor` until `done` is true
 
@@ -183,17 +184,39 @@ For HTTP actions that require authentication, make sure to set `Authorization: B
 
 ## Benchmark File Format
 
-A benchmark is a JSON file consisting of a single object. The properties of this object are:
+A benchmark is a JSON file consisting of a single object. The file size limit is 16 MiB. The properties of this object are:
 
 - `schema_version` - currently, must always have the value `"1.0.0"`. Meant to represent the version of the benchmark format
 - `name` - `string` representing the name of the benchmark, visible to general users. Must be non-empty
 - `description` - `string` description of the benchmark, visible to general users. May be empty but not `null`
 - `version` - `string` used to distinguish among one's benchmarks with the same name, visible to general users. May be empty. There is currently no enforced format for this field
-- `items` - a non-empty array of benchmark items. NOT visible to anyone but the owner and currently-relevant providers. Each item has the following properties:
-  - `item_id` - `string` identifying the item. Must be non-empty. Currently no enforced format
-  - `prompt` - `string` prompt for the given item. Must be non-empty
-  - `choices` - non-empty array of non-empty `string`s
+- `items` - a non-empty array of benchmark items. NOT visible to anyone but the owner and currently-relevant providers. Max length is 100. Each item has the following properties:
+  - `item_id` - `string` identifying the item. Must be non-empty and unique among all items in the benchmark
+  - `prompt` - `string` prompt for the given item. Must be non-empty. Max length is 8192 characters
+  - `choices` - non-empty array of non-empty `string`s. Max length is 10. Max length of each choice is 2048 characters
   - `correct_choice` - integer representing the correct answer in `choices`. Must be a valid array index (between 0 and choices.length-1, inclusive)
+
+## Adding Models
+
+Models can be added either by using convex's browser GUI or by calling `admin:addModel`. Instructions on how to call `admin:addModel` are also detailed in `convex/admin.ts`.
+
+A model currently has three components: name (non-empty `string`), revision (`string`, may be empty), and settings. settings is a <i>stringified</i> JSON object with the following properties:
+
+- `model`: same as the specified name
+- `model_revision`: same as the specified revision
+- `tokenizer_revision`: currently the same as `model_revision`
+- `worker_sha256`: `string` output by `worker_artifact` in `/workers/jmac_worker/specification.py`
+  - The worker is currently configured to output the received and expected specification (in that order) whenever there is a property mismatch for a received assignment. Use this to determine the new correct sha256 whenever the worker is modified, or the correct values of other properties. Note you must have at least defined each property in the spec before a worker will output the expectation
+- `method`: "choice-index-log-likelihood-v1"
+- `prompt_version`: "multiple-choice-index-v1"
+- `scoring`: "ordered-choice-equality-v1"
+- `device`: "cpu"
+- `dtype`: "float32"
+- `seed`: 0
+- `threads`: 1
+- `attention`: "eager"
+- `max_context_tokens`: 2048
+- `max_seconds`: 300
 
 ## Quick Testing from Client
 
@@ -207,9 +230,9 @@ The `/dev-sandbox` path on the client (component in `apps/web/src/app/components
    - You will be barred from making another until you approve the first one (see next step)
    - Payout is not currently implemented, but you should probably choose two addresses output from anvil as the providers' wallet addresses
 1. For each provider, set `approved` to `true` from the Convex dashboard
+   - Alternatively, use the admin functions above
 1. For each provider, from the frontend, add the model via addModelSupport (provider must still be `offline`)
 1. For each provider, from the frontend, set max jobs and set status to `ready`
-   - The backend cannot currently mark jobs as complete, so for testing set max jobs to 20
 1. From the frontend, create a job with the benchmarkId and modelId
 1. From the frontend, fund the job
-   - You need to first connect your "wallet" via entering a private key output from anvil
+   - You need to first connect your wallet. Metamask allows you to use an anvil testnet key as an account

@@ -106,7 +106,7 @@ export default function DevSandbox() {
           blockchainClient,
           "fundJob",
           jobId,
-          2500n
+          500_000_000_000_000n
         );
         await waitForTransactionSuccess(hash);
         alert("success");

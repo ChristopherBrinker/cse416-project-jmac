@@ -6,24 +6,102 @@ import { normalizeWalletAddress } from "./lib/wallet";
 /*
   Administrator operations. These are internal functions, so they cannot be
   called from the browser; run them with deployment credentials, e.g.
-    bunx convex run admin:addModel '{"name": "SmolLM2-135M-Instruct"}'
+    bunx convex run admin:addModel '{"name": "HuggingFaceTB/SmolLM2-135M-Instruct", "revision": "12fd25f77366fa6b3b4b768ec3050bf629380bac", "settings": "{\"model\": \"HuggingFaceTB/SmolLM2-135M-Instruct\", \"model_revision\": \"12fd25f77366fa6b3b4b768ec3050bf629380bac\", \"tokenizer_revision\": \"12fd25f77366fa6b3b4b768ec3050bf629380bac\", \"worker_sha256\": \"95864f1b0e23c0e9fb4a09e8c5961f754008cea37adfa1f0302a6c3823b0eecd\", \"method\": \"choice-index-log-likelihood-v1\", \"prompt_version\": \"multiple-choice-index-v1\", \"scoring\": \"ordered-choice-equality-v1\", \"device\": \"cpu\", \"dtype\": \"float32\",\"seed\": 0, \"threads\": 1, \"attention\": \"eager\", \"max_context_tokens\": 2048, \"max_seconds\": 300}"}'
+      Note that worker_sha256 changes with modification to the workers.
+      Currently, the worker includes the expected worker_sha256 as part of its output when receiving a job that mismatches
     bunx convex run admin:approveProvider '{"providerId": "<id>"}'
     bunx convex run admin:normalizeProviderWallets
 */
 
 export const addModel = internalMutation({
-  args: { name: v.string() },
+  args: { name: v.string(), revision: v.string(), settings: v.string() },
   handler: async (ctx, args) => {
     const name = args.name.trim();
     if (name.length === 0) {
       throw new Error("Model name must not be empty");
     }
-    // Idempotent so the documented seed command can be rerun safely
+
+    const revision = args.revision.trim();
+    if (revision.length === 0) {
+      throw new Error("Model revision must not be empty");
+    }
+
+    // settings validation
+    try {
+      const settings = JSON.parse(args.settings);
+      if (settings.model !== name) {
+        throw new Error("settings.model must be same as name");
+      }
+      if (settings.model_revision !== revision) {
+        throw new Error("settings.revision must be same as revision");
+      }
+      if (settings.tokenizer_revision !== settings.model_revision) {
+        throw new Error(
+          "settings.tokenizer_revision must be same as settings.revision"
+        );
+      }
+
+      const string_keys = [
+        "worker_sha256",
+        "method",
+        "prompt_version",
+        "scoring",
+        "device",
+        "dtype",
+        "attention",
+      ];
+      for (const k of string_keys) {
+        if (typeof settings[k] !== "string") {
+          throw new TypeError(`settings.${k} must be a string`);
+        }
+      }
+
+      const numeric_keys = [
+        "seed",
+        "threads",
+        "max_context_tokens",
+        "max_seconds",
+      ];
+      for (const k of numeric_keys) {
+        if (typeof settings[k] !== "number") {
+          throw new TypeError(`settings.${k} must be a number`);
+        }
+      }
+    } catch (error) {
+      console.log(error);
+      throw new Error("settings validation error");
+    }
+
     const existing = await ctx.db
       .query("models")
       .withIndex("by_name", (q) => q.eq("name", name))
       .first();
-    return existing?._id ?? (await ctx.db.insert("models", { name }));
+
+    if (existing) {
+      const existingJob = await ctx.db
+        .query("job_assignments")
+        .withIndex("by_modelId_finished", (q) =>
+          q.eq("modelId", existing._id).eq("finished", false)
+        )
+        .first();
+      if (existingJob) {
+        throw new Error("Cannot modify model while job assignments are active");
+      }
+
+      await ctx.db.patch("models", existing._id, {
+        revision: args.revision,
+        settings: args.settings,
+      });
+    }
+
+    return (
+      existing?._id ??
+      (await ctx.db.insert("models", {
+        name,
+        revision: args.revision,
+        settings: args.settings,
+      }))
+    );
   },
 });
 

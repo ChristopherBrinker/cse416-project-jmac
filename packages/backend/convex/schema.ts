@@ -9,9 +9,8 @@ export default defineSchema({
     name: v.string(),
     description: v.string(),
     version: v.string(),
+    itemCount: v.int64(),
     contentHash: v.string(),
-    // recorded on-chain at assignment; benchmarks uploaded before this field need re-uploading
-    itemCount: v.optional(v.number()),
   })
     .index("by_ownerId_name_version", ["ownerId", "name", "version"])
     .searchIndex("search_name", {
@@ -22,6 +21,8 @@ export default defineSchema({
 
   models: defineTable({
     name: v.string(),
+    revision: v.string(),
+    settings: v.string(),
   })
     .index("by_name", ["name"])
     .searchIndex("search_name", {
@@ -36,6 +37,10 @@ export default defineSchema({
     price: v.int64(),
     status: v.string(),
     statusTime: v.number(),
+    // In seconds
+    commitDeadline: v.optional(v.number()),
+    // In seconds
+    revealDeadline: v.optional(v.number()),
     score: v.optional(v.number()),
     jobFunded_tx: v.optional(v.string()),
     jobFailed_tx: v.optional(v.string()),
@@ -68,7 +73,8 @@ export default defineSchema({
   })
     .index("by_providerId_finished", ["providerId", "finished"])
     .index("by_jobId", ["jobId"])
-    .index("by_jobId_providerId_finished", ["jobId", "providerId", "finished"]),
+    .index("by_jobId_providerId_finished", ["jobId", "providerId", "finished"])
+    .index("by_modelId_finished", ["modelId", "finished"]),
 
   providers: defineTable({
     userId: v.string(),

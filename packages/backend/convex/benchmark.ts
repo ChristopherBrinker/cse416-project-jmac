@@ -9,6 +9,13 @@ import {
   httpAction,
 } from "./_generated/server";
 
+// Should match workers/jmac_worker/specification.py
+const MAX_BYTES = 16 * 1024 * 1024;
+const MAX_ITEMS = 100;
+const MAX_PROMPT = 8192;
+const MAX_CHOICES = 10;
+const MAX_CHOICE = 2048;
+
 const validateBenchmark = (
   benchmark: any
 ): { success: boolean; msg: string } => {
@@ -30,6 +37,14 @@ const validateBenchmark = (
     if (!Array.isArray(items) || items.length === 0) {
       return { success: false, msg: "items must be a non-empty array" };
     }
+    if (items.length > MAX_ITEMS) {
+      return {
+        success: false,
+        msg: `items is too long (limit: ${MAX_ITEMS} members)`,
+      };
+    }
+
+    const ids = new Set<string>();
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
@@ -39,10 +54,24 @@ const validateBenchmark = (
           msg: `items[${i}].item_id must be a non-empty string`,
         };
       }
+      if (ids.has(item.item_id)) {
+        return {
+          success: false,
+          msg: `items[${i}].item_id is not unique`,
+        };
+      }
+      ids.add(item.item_id);
+
       if (typeof item.prompt !== "string" || item.prompt.length === 0) {
         return {
           success: false,
           msg: `items[${i}].prompt must be a non-empty string`,
+        };
+      }
+      if (item.prompt.length > MAX_PROMPT) {
+        return {
+          success: false,
+          msg: `items[${i}].prompt is too long (limit: ${MAX_PROMPT} characters)`,
         };
       }
 
@@ -51,6 +80,12 @@ const validateBenchmark = (
         return {
           success: false,
           msg: `items[${i}].choices must be a non-empty array`,
+        };
+      }
+      if (choices.length > MAX_CHOICES) {
+        return {
+          success: false,
+          msg: `items[${i}].choices is too long (limit: ${MAX_CHOICES} members)`,
         };
       }
 
@@ -73,6 +108,12 @@ const validateBenchmark = (
           return {
             success: false,
             msg: `items[${i}].choices[${j}] must be a non-empty string`,
+          };
+        }
+        if (choice.length > MAX_CHOICE) {
+          return {
+            success: false,
+            msg: `items[${i}].choices[${j}] is too long (limit: ${MAX_CHOICE} characters)`,
           };
         }
       }
@@ -103,7 +144,6 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
   }
 
   const blob = await request.blob();
-  const benchmarkStr = await blob.slice().text();
 
   if (blob.size === 0) {
     return new Response(JSON.stringify({ error: "Upload a non-empty file" }), {
@@ -115,6 +155,21 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
       }),
     });
   }
+  if (blob.size > MAX_BYTES) {
+    return new Response(
+      JSON.stringify({ error: `File too big (limit: ${MAX_BYTES} bytes)` }),
+      {
+        status: 400,
+        headers: new Headers({
+          "Access-Control-Allow-Origin": siteUrl,
+          "Content-Type": "application/json",
+          Vary: "origin",
+        }),
+      }
+    );
+  }
+
+  const benchmarkStr = await blob.slice().text();
 
   let benchmark;
   try {
@@ -148,6 +203,7 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
   const name = String(benchmark.name);
   const description = String(benchmark.description);
   const version = String(benchmark.version);
+  const itemCount = BigInt(benchmark.items.length);
 
   const strUint8 = new TextEncoder().encode(benchmarkStr);
   const hashBuffer = await crypto.subtle.digest("SHA-256", strUint8);
@@ -168,8 +224,8 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
         name,
         description,
         version,
+        itemCount,
         contentHash,
-        itemCount: benchmark.items.length,
       }
     );
 
@@ -218,8 +274,8 @@ export const createBenchmarkEntry = internalMutation({
     name: v.string(),
     description: v.string(),
     version: v.string(),
+    itemCount: v.int64(),
     contentHash: v.string(),
-    itemCount: v.number(),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db

@@ -64,12 +64,14 @@ In `apps/web/.env.local`, add:
 | `NEXT_PUBLIC_CONTRACT_ADDRESS` | Same as `CONTRACT_ADDRESS` in scheduler |
 | `NEXT_PUBLIC_NET_URL` | Same as `NET_URL` in scheduler |
 
-Before continuing, set these values **on each Convex deployment** from `packages/backend` (replace `$BACKEND_CONVEX_KEY` with the one you made for the scheduler):
+Before continuing, set these values **on each Convex deployment** from `packages/backend`. Replace `$BACKEND_CONVEX_KEY` with the one you made for the scheduler, `$CHAIN_ID` with the chain id output by anvil (usually 31337), and `$CONTRACT_ADDRESS` with the address of the deployed contract:
 
 ```sh
 bun x convex env set BETTER_AUTH_SECRET "$(openssl rand -base64 32)"
 bun x convex env set SITE_URL http://localhost:7346
 bun x convex env set BACKEND_CONVEX_KEY $BACKEND_CONVEX_KEY
+bun x convex env set CHAIN_ID $CHAIN_ID
+bun x convex env set CONTRACT_ADDRESS $CONTRACT_ADDRESS
 ```
 
 Keep the secret stable for that deployment. `SITE_URL` must match the browser origin, including port. These settings belong in the Convex dashboard/deployment environment; putting them in a local file does not configure the deployed backend. The Next.js app does not need the auth secret.
@@ -97,6 +99,10 @@ bun run dev
 Open [http://localhost:7346](http://localhost:7346), create an account at `/sign-up`, sign in at `/sign-in`, and visit `/dashboard`. A successful connection shows the backend as connected (the private query returns “This is private”). Also go to `/dev-sandbox` for a minimal interface for the current interactions.
 
 To fund jobs, connect a browser wallet such as MetaMask. Import an Anvil test account into the wallet; the app adds the local network (chain 31337) when you connect. Never paste a key into the site. Approve providers and seed models with the admin-only CLI functions in the [backend guide](packages/backend/README.md#admin).
+
+To set up providers, see [workers/README.md](workers/README.md).
+
+For the benchmark format specification and instructions for adding models, see the [backend guide](packages/backend/README.md).
 
 ## Account configuration
 

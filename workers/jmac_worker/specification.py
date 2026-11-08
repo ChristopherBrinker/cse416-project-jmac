@@ -72,11 +72,19 @@ def validate_specification(
     }
     if set(value) != required:
         raise ValueError("unsupported_specification")
-    if any(
-        type(value[k]) is not type(v) or (supported and value[k] != v)
-        for k, v in settings.items()
-    ):
-        raise ValueError("unsupported_configuration")
+    for k, v in settings.items():
+        if type(value[k]) is not type(v) or (supported and value[k] != v):
+            # Convex cannot send something Python can interpret as int, so attempt to cast
+            if (
+                type(v) is int
+                and type(value[k]) is float
+                and value[k].is_integer()
+                and (not supported or value[k] == v)
+            ):
+                value[k] = int(value[k])
+            else:
+                print(value, settings)
+                raise ValueError("unsupported_configuration")
     for key in ("benchmark_id", "benchmark_version"):
         if not isinstance(value[key], str) or not value[key]:
             raise ValueError("invalid_specification")
@@ -85,7 +93,12 @@ def validate_specification(
     ):
         raise ValueError("invalid_hash")
     for key in ("item_count", "chain_id", "commit_deadline", "reveal_deadline"):
-        if type(value[key]) is not int or value[key] <= 0:
+        if type(value[key]) is not int:
+            if type(value[key]) is float and value[key].is_integer():
+                value[key] = int(value[key])
+            else:
+                raise ValueError("invalid_specification")
+        if value[key] <= 0:
             raise ValueError("invalid_specification")
     if (
         value["item_count"] > MAX_ITEMS

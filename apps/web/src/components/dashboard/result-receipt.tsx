@@ -264,10 +264,7 @@ export function ResultReceipt({
         ) : null}
         <ReceiptRow label="Model">{job.model?.name ?? job.modelId}</ReceiptRow>
         <ReceiptRow label="Model revision">
-          <NotRecorded owner="backend" />
-        </ReceiptRow>
-        <ReceiptRow label="Worker version">
-          <NotRecorded owner="worker/backend" />
+          {job.model?.revision ?? "—"}
         </ReceiptRow>
         {resultCommitment ? (
           <ReceiptRow label="Result commitment" copyValue={resultCommitment}>
