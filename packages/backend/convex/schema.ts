@@ -37,7 +37,9 @@ export default defineSchema({
     price: v.int64(),
     status: v.string(),
     statusTime: v.number(),
+    // In seconds
     commitDeadline: v.optional(v.number()),
+    // In seconds
     revealDeadline: v.optional(v.number()),
     score: v.optional(v.number()),
     jobFunded_tx: v.optional(v.string()),

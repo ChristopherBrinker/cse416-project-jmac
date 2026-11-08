@@ -264,7 +264,7 @@ export function ResultReceipt({
         ) : null}
         <ReceiptRow label="Model">{job.model?.name ?? job.modelId}</ReceiptRow>
         <ReceiptRow label="Model revision">
-          {job.model?.revision ?? ""}
+          {job.model?.revision ?? "—"}
         </ReceiptRow>
         {resultCommitment ? (
           <ReceiptRow label="Result commitment" copyValue={resultCommitment}>

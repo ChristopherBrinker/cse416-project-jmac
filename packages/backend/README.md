@@ -74,7 +74,7 @@ This contains information useful for interacting with the convex backend
 
 Internal functions; they cannot be called from a browser. Run them with deployment credentials from `packages/backend`:
 
-- `admin:addModel` - `bunx convex run admin:addModel '{"name": "SmolLM2-135M-Instruct"}'` adds a model record
+- `admin:addModel` - `bunx convex run admin:addModel '{"name": "...", "revision": "...", "settings": "..."}'` adds a model record. See [here](#adding-models) for more details
 - `admin:approveProvider` - `bunx convex run admin:approveProvider '{"providerId": "<id>"}'` approves a provider; refuses providers whose wallet was never verified with a signed challenge
 - `admin:normalizeProviderWallets` - `bunx convex run admin:normalizeProviderWallets` checksums wallet addresses stored before signed registration so uniqueness checks ignore casing; rerun with the returned `cursor` until `done` is true
 
@@ -184,7 +184,7 @@ For HTTP actions that require authentication, make sure to set `Authorization: B
 
 ## Benchmark File Format
 
-A benchmark is a JSON file consisting of a single object. The file size limit is 16 KB. The properties of this object are:
+A benchmark is a JSON file consisting of a single object. The file size limit is 16 MiB. The properties of this object are:
 
 - `schema_version` - currently, must always have the value `"1.0.0"`. Meant to represent the version of the benchmark format
 - `name` - `string` representing the name of the benchmark, visible to general users. Must be non-empty
@@ -207,7 +207,6 @@ A model currently has three components: name (non-empty `string`), revision (`st
 - `tokenizer_revision`: currently the same as `model_revision`
 - `worker_sha256`: `string` output by `worker_artifact` in `/workers/jmac_worker/specification.py`
   - The worker is currently configured to output the received and expected specification (in that order) whenever there is a property mismatch for a received assignment. Use this to determine the new correct sha256 whenever the worker is modified, or the correct values of other properties. Note you must have at least defined each property in the spec before a worker will output the expectation
-  - Current value is "73b778dd9658892c9c28b58c7204163916d6c8eb804f1a3bc0681b4e257fde39"
 - `method`: "choice-index-log-likelihood-v1"
 - `prompt_version`: "multiple-choice-index-v1"
 - `scoring`: "ordered-choice-equality-v1"
@@ -217,7 +216,7 @@ A model currently has three components: name (non-empty `string`), revision (`st
 - `threads`: 1
 - `attention`: "eager"
 - `max_context_tokens`: 2048
-- `max_seconds`: MAX_SECONDS
+- `max_seconds`: 300
 
 ## Quick Testing from Client
 

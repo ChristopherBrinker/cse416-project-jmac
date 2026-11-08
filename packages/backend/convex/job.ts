@@ -343,7 +343,7 @@ export const getJobsForProvider = query({
         };
       })
     );
-    return ret;
+    return ret.filter((x) => x !== null);
   },
 });
 

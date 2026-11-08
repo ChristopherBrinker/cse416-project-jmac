@@ -102,7 +102,7 @@ To fund jobs, connect a browser wallet such as MetaMask. Import an Anvil test ac
 
 To set up providers, see [workers/README.md](workers/README.md).
 
-For the benchmark format specification and instructions for adding models, see the [backend guide](packages/backend/README.md.
+For the benchmark format specification and instructions for adding models, see the [backend guide](packages/backend/README.md).
 
 ## Account configuration
 

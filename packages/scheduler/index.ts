@@ -269,6 +269,20 @@ async function main() {
     if (!creatorWallet) {
       return { success: false, error: CHAIN_READ_FAILED } as const;
     }
+
+    const job = (await publicClient.readContract({
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "jobs",
+      args: [jobId],
+    })) as struct_job;
+    if (!job[5]) {
+      return { success: false, error: "Job not found" } as const;
+    }
+
+    const commitDeadline = Number(job[7]);
+    const revealDeadline = commitDeadline + REVEAL_WINDOW;
+
     const providerAssignment = await convexClient.mutation(
       api.job.assignProviders,
       {
@@ -276,8 +290,8 @@ async function main() {
         price,
         jobFunded_tx,
         retry,
-        commitDeadline: Date.now() + COMMIT_WINDOW * 1000,
-        revealDeadline: Date.now() + (COMMIT_WINDOW + REVEAL_WINDOW) * 1000,
+        commitDeadline,
+        revealDeadline,
         creatorWallet,
         backendKey: BACKEND_CONVEX_KEY,
       }

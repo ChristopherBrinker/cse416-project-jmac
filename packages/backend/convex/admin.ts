@@ -20,11 +20,65 @@ export const addModel = internalMutation({
     if (name.length === 0) {
       throw new Error("Model name must not be empty");
     }
-    // Idempotent so the documented seed command can be rerun safely
+
+    // settings validation
+    try {
+      const settings = JSON.parse(args.settings);
+      if (settings.model !== args.name) {
+        throw new Error("settings.model must be same as name");
+      }
+      if (settings.model_revision !== args.revision) {
+        throw new Error("settings.revision must be same as revision");
+      }
+      if (settings.tokenizer_revision !== settings.model_revision) {
+        throw new Error(
+          "settings.tokenizer_revision must be same as settings.revision"
+        );
+      }
+
+      const string_keys = [
+        "worker_sha256",
+        "method",
+        "prompt_version",
+        "scoring",
+        "device",
+        "dtype",
+        "attention",
+      ];
+      for (const k of string_keys) {
+        if (typeof settings[k] !== "string") {
+          throw new TypeError(`settings.${k} must be a string`);
+        }
+      }
+
+      const numeric_keys = [
+        "seed",
+        "threads",
+        "max_context_tokens",
+        "max_seconds",
+      ];
+      for (const k of numeric_keys) {
+        if (typeof settings[k] !== "number") {
+          throw new TypeError(`settings.${k} must be a number`);
+        }
+      }
+    } catch (error) {
+      console.log(error);
+      throw new Error("settings validation error");
+    }
+
     const existing = await ctx.db
       .query("models")
       .withIndex("by_name", (q) => q.eq("name", name))
       .first();
+
+    if (existing) {
+      await ctx.db.patch("models", existing._id, {
+        revision: args.revision,
+        settings: args.settings,
+      });
+    }
+
     return (
       existing?._id ??
       (await ctx.db.insert("models", {

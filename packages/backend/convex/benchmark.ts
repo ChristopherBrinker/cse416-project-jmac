@@ -144,7 +144,6 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
   }
 
   const blob = await request.blob();
-  const benchmarkStr = await blob.slice().text();
 
   if (blob.size === 0) {
     return new Response(JSON.stringify({ error: "Upload a non-empty file" }), {
@@ -169,6 +168,8 @@ export const uploadBenchmark = httpAction(async (ctx, request) => {
       }
     );
   }
+
+  const benchmarkStr = await blob.slice().text();
 
   let benchmark;
   try {
