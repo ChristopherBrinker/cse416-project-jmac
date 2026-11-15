@@ -131,8 +131,6 @@ bun run test          # Unit tests (web job lifecycle, backend functions)
 bun run fix           # Apply Ultracite fixes and formatting
 ```
 
-Before running tests, go to `/packages/backend`, create `.env.test`, and in it write a value for each of the variables you would set on a Convex deployment (that is, `BETTER_AUTH_SECRET`, `SITE_URL`,`BACKEND_CONVEX_KEY`, `CHAIN_ID`, and `CONTRACT_ADDRESS`). Their values need not match those on your actual deployment.
-
 | Command | Purpose |
 | --- | --- |
 | `bun run dev:web` | Start only Next.js on port 7346 |
