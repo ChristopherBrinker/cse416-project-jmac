@@ -5,6 +5,7 @@
   "description": "",
   "license": "ISC",
   "author": "",
+  "type": "module",
   "exports": {
     "./convex/_generated/api": "./convex/_generated/api.js",
     "./convex/_generated/dataModel": "./convex/_generated/dataModel.d.ts"
@@ -15,14 +16,17 @@
     "lint": "oxlint .",
     "check-types": "tsc --noEmit -p convex/tsconfig.json",
     "codegen": "convex codegen",
-    "test": "bun test tests"
+    "test": "vitest run"
   },
   "dependencies": {
     "@convex-dev/better-auth": "^0.12.5",
     "better-auth": "1.6.15",
     "convex": "catalog:",
+    "convex-test": "catalog:",
     "ox": "0.14.56",
     "viem": "^2.57.7",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0",
     "zod": "catalog:"
   },
   "devDependencies": {

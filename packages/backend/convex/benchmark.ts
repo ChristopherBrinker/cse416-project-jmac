@@ -16,7 +16,15 @@ const MAX_PROMPT = 8192;
 const MAX_CHOICES = 10;
 const MAX_CHOICE = 2048;
 
-const validateBenchmark = (
+export const benchmarkLimits = {
+  MAX_BYTES,
+  MAX_ITEMS,
+  MAX_PROMPT,
+  MAX_CHOICES,
+  MAX_CHOICE,
+};
+
+export const validateBenchmark = (
   benchmark: any
 ): { success: boolean; msg: string } => {
   try {
