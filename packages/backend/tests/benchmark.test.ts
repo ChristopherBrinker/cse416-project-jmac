@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 import { api } from "../convex/_generated/api";
 import { validateBenchmark, benchmarkLimits } from "../convex/benchmark";
 import schema from "../convex/schema";
-import { modules } from "./setup-test";
+import { modules, generateFakeIds } from "./setup-test";
 import { valid_benchmark } from "./valid-benchmark";
 
 describe("validateBenchmark", () => {
@@ -139,6 +139,7 @@ describe("validateBenchmark", () => {
 });
 
 describe("uploadBenchmark", () => {
+  // First test using convex needs more time
   test("accepts valid benchmark", async () => {
     const t = convexTest(schema, modules).withIdentity({ name: "test" });
     const res = await t.fetch("/benchmark/upload", {
@@ -153,7 +154,7 @@ describe("uploadBenchmark", () => {
 
     const body = (await res.json()) as any;
     expect(body.benchmarkId).toBeDefined();
-  });
+  }, 15_000);
 
   test("rejects invalid JSON", async () => {
     const t = convexTest(schema, modules).withIdentity({ name: "test" });
@@ -324,6 +325,27 @@ describe("getBenchmarkFile", () => {
     expect(res.status).toBe(200);
     const res_b = (await res.json()) as any;
     expect(res_b.name).toBe(valid_benchmark.name);
+  });
+
+  test("fails when job or provider do not exist", async () => {
+    const testData = await setupGetBenchmarkFile({});
+    const t = testData.t;
+
+    const { fakeJobId, fakeProviderId } = await generateFakeIds(t);
+
+    let res = await t.fetch(
+      `/benchmark?jobId=${fakeJobId}&providerId=${testData.providerId}&secret=${testData.providerSecret}`,
+      { method: "GET" }
+    );
+    expect(res.headers.get("Content-Type")).toBe("application/json");
+    expect(res.status).toBe(400);
+
+    res = await t.fetch(
+      `/benchmark?jobId=${testData.jobId}&providerId=${fakeProviderId}&secret=${testData.providerSecret}`,
+      { method: "GET" }
+    );
+    expect(res.headers.get("Content-Type")).toBe("application/json");
+    expect(res.status).toBe(400);
   });
 
   test("fails when provider secret is incorrect", async () => {

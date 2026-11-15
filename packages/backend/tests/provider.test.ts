@@ -3,14 +3,10 @@ import { describe, expect, test } from "vitest";
 
 import { api } from "../convex/_generated/api";
 import schema from "../convex/schema";
-import { modules } from "./setup-test";
-
-const BACKEND_CONVEX_KEY = process.env.BACKEND_CONVEX_KEY;
-if (!BACKEND_CONVEX_KEY) {
-  throw new Error("Set BACKEND_CONVEX_KEY in .env.test");
-}
+import { modules, generateFakeIds, BACKEND_CONVEX_KEY } from "./setup-test";
 
 describe("addModelSupport", () => {
+  // First test using convex needs more time
   test("succeeds when provider and model are valid and support does not exist", async () => {
     const t = convexTest(schema, modules).withIdentity({
       subject: "testuser",
@@ -43,6 +39,49 @@ describe("addModelSupport", () => {
 
       const ms = await ctx.db.query("model_support").first();
       expect(ms).not.toBe(null);
+    });
+  }, 15_000);
+
+  test("fails when provider or model do not exist", async () => {
+    const t = convexTest(schema, modules).withIdentity({
+      subject: "testuser",
+    });
+    const { fakeModelId, fakeProviderId } = await generateFakeIds(t);
+    await t.run(async (ctx) => {
+      const userId = "testuser";
+      const providerSecret = "1234";
+
+      const modelId = await ctx.db.insert("models", {
+        name: "testModel",
+        revision: "",
+        settings: "",
+      });
+      const providerId = await ctx.db.insert("providers", {
+        userId,
+        secret: providerSecret,
+        walletAddress: "",
+        approved: true,
+        maxJobs: 10n,
+        currentJobs: 1n,
+        status: "offline",
+        lastHeartbeat: 0,
+      });
+
+      // Provider DNE
+      let res = await t.mutation(api.provider.addModelSupport, {
+        providerId: fakeProviderId,
+        modelId,
+      });
+      expect(res.success).toBe(false);
+      expect(res.error).toBe("Provider not found");
+
+      // Model DNE
+      res = await t.mutation(api.provider.addModelSupport, {
+        providerId,
+        modelId: fakeModelId,
+      });
+      expect(res.success).toBe(false);
+      expect(res.error).toBe("Model not found");
     });
   });
 
@@ -106,6 +145,7 @@ describe("addModelSupport", () => {
         lastHeartbeat: 0,
       });
 
+      // Provider ready
       let res = await t.mutation(api.provider.addModelSupport, {
         providerId,
         modelId,
@@ -117,6 +157,7 @@ describe("addModelSupport", () => {
       let ms = await ctx.db.query("model_support").first();
       expect(ms).toBe(null);
 
+      // Provider disconnected
       await ctx.db.patch("providers", providerId, { status: "disconnected" });
       res = await t.mutation(api.provider.addModelSupport, {
         providerId,
@@ -217,6 +258,55 @@ describe("removeModelSupport", () => {
     });
   });
 
+  test("fails when provider or model do not exist", async () => {
+    const t = convexTest(schema, modules).withIdentity({
+      subject: "testuser",
+    });
+    const { fakeModelId, fakeProviderId } = await generateFakeIds(t);
+    await t.run(async (ctx) => {
+      const userId = "testuser";
+      const providerSecret = "1234";
+
+      const modelId = await ctx.db.insert("models", {
+        name: "testModel",
+        revision: "",
+        settings: "",
+      });
+      const providerId = await ctx.db.insert("providers", {
+        userId,
+        secret: providerSecret,
+        walletAddress: "",
+        approved: true,
+        maxJobs: 10n,
+        currentJobs: 1n,
+        status: "offline",
+        lastHeartbeat: 0,
+      });
+
+      await ctx.db.insert("model_support", {
+        providerId,
+        modelId,
+        available: false,
+      });
+
+      // Provider DNE
+      let res = await t.mutation(api.provider.removeModelSupport, {
+        providerId: fakeProviderId,
+        modelId,
+      });
+      expect(res.success).toBe(false);
+      expect(res.error).toBe("Provider not found");
+
+      // Model DNE
+      res = await t.mutation(api.provider.removeModelSupport, {
+        providerId,
+        modelId: fakeModelId,
+      });
+      expect(res.success).toBe(false);
+      expect(res.error).toBe("Model not found");
+    });
+  });
+
   test("fails when provider does not belong to user", async () => {
     const t = convexTest(schema, modules).withIdentity({
       subject: "testuser",
@@ -289,6 +379,7 @@ describe("removeModelSupport", () => {
         available: false,
       });
 
+      // Provider ready
       let res = await t.mutation(api.provider.removeModelSupport, {
         providerId,
         modelId,
@@ -300,6 +391,7 @@ describe("removeModelSupport", () => {
       let ms = await ctx.db.query("model_support").first();
       expect(ms).not.toBe(null);
 
+      // Provider disconnected
       await ctx.db.patch("providers", providerId, { status: "disconnected" });
       res = await t.mutation(api.provider.removeModelSupport, {
         providerId,
@@ -353,6 +445,7 @@ describe("setMaxJobs", () => {
     const t = convexTest(schema, modules).withIdentity({
       subject: "testuser",
     });
+
     await t.run(async (ctx) => {
       const userId = "testuser";
       const providerSecret = "1234";
@@ -376,6 +469,21 @@ describe("setMaxJobs", () => {
       const p = await ctx.db.get("providers", providerId);
       expect(p!.maxJobs).toBe(10n);
     });
+  });
+
+  test("fails when provider does not exist", async () => {
+    const t = convexTest(schema, modules).withIdentity({
+      subject: "testuser",
+    });
+
+    const { fakeProviderId } = await generateFakeIds(t);
+
+    const res = await t.mutation(api.provider.setMaxJobs, {
+      providerId: fakeProviderId,
+      newMaxJobs: 10n,
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("Provider not found");
   });
 
   test("fails when provider does not belong to user", async () => {
@@ -427,6 +535,7 @@ describe("setMaxJobs", () => {
         lastHeartbeat: 0,
       });
 
+      // Provider ready
       let res = await t.mutation(api.provider.setMaxJobs, {
         providerId,
         newMaxJobs: 10n,
@@ -438,6 +547,7 @@ describe("setMaxJobs", () => {
       let p = await ctx.db.get("providers", providerId);
       expect(p!.maxJobs).toBe(0n);
 
+      // Provider disconnected
       await ctx.db.patch("providers", providerId, { status: "disconnected" });
       res = await t.mutation(api.provider.setMaxJobs, {
         providerId,
@@ -471,6 +581,7 @@ describe("setMaxJobs", () => {
         lastHeartbeat: 0,
       });
 
+      // newMaxJobs negative
       let res = await t.mutation(api.provider.setMaxJobs, {
         providerId,
         newMaxJobs: -1n,
@@ -480,6 +591,7 @@ describe("setMaxJobs", () => {
       let p = await ctx.db.get("providers", providerId);
       expect(p!.maxJobs).toBe(0n);
 
+      // newMaxJobs exceeds limit (>20)
       res = await t.mutation(api.provider.setMaxJobs, {
         providerId,
         newMaxJobs: 21n,
@@ -524,6 +636,7 @@ describe("setStatus", () => {
         available: false,
       });
 
+      // Setting ready
       let res = await t.mutation(api.provider.setStatus, {
         providerId,
         newStatus: "ready",
@@ -534,6 +647,7 @@ describe("setStatus", () => {
       let ms = await ctx.db.get("model_support", msId);
       expect(ms!.available).toBe(true);
 
+      // Setting offline
       res = await t.mutation(api.provider.setStatus, {
         providerId,
         newStatus: "offline",
@@ -575,6 +689,7 @@ describe("setStatus", () => {
         available: false,
       });
 
+      // Setting ready
       let res = await t.mutation(api.provider.setStatus, {
         providerId,
         newStatus: "ready",
@@ -586,6 +701,7 @@ describe("setStatus", () => {
       let ms = await ctx.db.get("model_support", msId);
       expect(ms!.available).toBe(true);
 
+      // Setting offline
       res = await t.mutation(api.provider.setStatus, {
         providerId,
         newStatus: "offline",
@@ -597,6 +713,21 @@ describe("setStatus", () => {
       ms = await ctx.db.get("model_support", msId);
       expect(ms!.available).toBe(false);
     });
+  });
+
+  test("fails when provider does not exist", async () => {
+    const t = convexTest(schema, modules).withIdentity({
+      subject: "testuser",
+    });
+
+    const { fakeProviderId } = await generateFakeIds(t);
+
+    const res = await t.mutation(api.provider.setStatus, {
+      providerId: fakeProviderId,
+      newStatus: "ready",
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("Provider not found");
   });
 
   test("fails when provider secret is incorrect", async () => {
@@ -853,6 +984,7 @@ describe("heartbeat", () => {
         available: true,
       });
 
+      // Provider is ready
       let res = await t.mutation(api.provider.heartbeat, {
         providerId,
         secret: providerSecret,
@@ -863,6 +995,7 @@ describe("heartbeat", () => {
       let ms = await ctx.db.get("model_support", msId);
       expect(ms!.available).toBe(true);
 
+      // Provider is offline
       await ctx.db.patch("providers", providerId, { status: "offline" });
       await ctx.db.patch("model_support", msId, { available: false });
       res = await t.mutation(api.provider.heartbeat, {
@@ -916,6 +1049,21 @@ describe("heartbeat", () => {
       const ms = await ctx.db.get("model_support", msId);
       expect(ms!.available).toBe(true);
     });
+  });
+
+  test("fails when provider does not exist", async () => {
+    const t = convexTest(schema, modules).withIdentity({
+      subject: "testuser",
+    });
+
+    const { fakeProviderId } = await generateFakeIds(t);
+
+    const res = await t.mutation(api.provider.heartbeat, {
+      providerId: fakeProviderId,
+      secret: "",
+    });
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("Provider not found");
   });
 
   test("fails when secret is incorrect", async () => {
