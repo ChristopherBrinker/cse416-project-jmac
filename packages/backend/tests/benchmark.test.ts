@@ -1,30 +1,11 @@
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 
+import { api } from "../convex/_generated/api";
 import { validateBenchmark, benchmarkLimits } from "../convex/benchmark";
 import schema from "../convex/schema";
 import { modules } from "./setup-test";
-
-const valid_benchmark = {
-  schema_version: "1.0.0",
-  name: "MyBenchmark",
-  description: "",
-  version: "1.0",
-  items: [
-    {
-      item_id: "item1",
-      prompt: "p",
-      choices: ["choice1", "choice2", "choice3"],
-      correct_choice: 1,
-    },
-    {
-      item_id: "item2",
-      prompt: "p2",
-      choices: ["true", "false"],
-      correct_choice: 0,
-    },
-  ],
-} as any;
+import { valid_benchmark } from "./valid-benchmark";
 
 describe("validateBenchmark", () => {
   test("accepts valid benchmark", () => {
@@ -169,6 +150,9 @@ describe("uploadBenchmark", () => {
     });
     expect(res.headers.get("Content-Type")).toBe("application/json");
     expect(res.status).toBe(200);
+
+    const body = (await res.json()) as any;
+    expect(body.benchmarkId).toBeDefined();
   });
 
   test("rejects invalid JSON", async () => {
@@ -277,12 +261,12 @@ const setupGetBenchmarkFile = async (settings: {
 
     const benchmarkId = await ctx.db.insert("benchmarks", {
       storageId: sId,
-      ownerId: "",
-      ownerName: "",
-      name: "1",
-      description: "",
-      version: "",
-      itemCount: 2n,
+      ownerId: "testuser",
+      ownerName: "testuser",
+      name: valid_benchmark.name,
+      description: valid_benchmark.description,
+      version: valid_benchmark.version,
+      itemCount: BigInt(valid_benchmark.items.length),
       contentHash: "",
     });
 
@@ -380,5 +364,138 @@ describe("getBenchmarkFile", () => {
     );
     expect(res.headers.get("Content-Type")).toBe("application/json");
     expect(res.status).toBe(400);
+  });
+});
+
+describe("getBenchmarks", () => {
+  test("gets benchmark by just name or part of name, doesn't get by wrong name", async () => {
+    const t = convexTest(schema, modules);
+    await t.run(async (ctx) => {
+      const b = new Blob([JSON.stringify(valid_benchmark)], {
+        type: "application/json",
+      });
+      const sId = await ctx.storage.store(b);
+
+      const benchmarkId = await ctx.db.insert("benchmarks", {
+        storageId: sId,
+        ownerId: "testuser",
+        ownerName: "testuser",
+        name: valid_benchmark.name,
+        description: valid_benchmark.description,
+        version: valid_benchmark.version,
+        itemCount: BigInt(valid_benchmark.items.length),
+        contentHash: "",
+      });
+
+      let res = await t.query(api.benchmark.getBenchmarks, {
+        name: valid_benchmark.name,
+      });
+      expect(res).toHaveLength(1);
+      expect(res[0]?._id).toBe(benchmarkId);
+
+      res = await t.query(api.benchmark.getBenchmarks, {
+        name: valid_benchmark.name.slice(0, 3),
+      });
+      expect(res).toHaveLength(1);
+      expect(res[0]?._id).toBe(benchmarkId);
+
+      res = await t.query(api.benchmark.getBenchmarks, {
+        name: "this does not match anything",
+      });
+      expect(res).toHaveLength(0);
+    });
+  });
+
+  test("gets benchmark by just owner name", async () => {
+    const t = convexTest(schema, modules);
+    await t.run(async (ctx) => {
+      const b = new Blob([JSON.stringify(valid_benchmark)], {
+        type: "application/json",
+      });
+      const sId = await ctx.storage.store(b);
+
+      const benchmarkId = await ctx.db.insert("benchmarks", {
+        storageId: sId,
+        ownerId: "testuser",
+        ownerName: "testuser",
+        name: valid_benchmark.name,
+        description: valid_benchmark.description,
+        version: valid_benchmark.version,
+        itemCount: BigInt(valid_benchmark.items.length),
+        contentHash: "",
+      });
+
+      let res = await t.query(api.benchmark.getBenchmarks, {
+        ownerName: "testuser",
+      });
+      expect(res).toHaveLength(1);
+      expect(res[0]?._id).toBe(benchmarkId);
+
+      res = await t.query(api.benchmark.getBenchmarks, {
+        ownerName: "this does not match anything",
+      });
+      expect(res).toHaveLength(0);
+    });
+  });
+
+  test("gets benchmark by just version", async () => {
+    const t = convexTest(schema, modules);
+    await t.run(async (ctx) => {
+      const b = new Blob([JSON.stringify(valid_benchmark)], {
+        type: "application/json",
+      });
+      const sId = await ctx.storage.store(b);
+
+      const benchmarkId = await ctx.db.insert("benchmarks", {
+        storageId: sId,
+        ownerId: "testuser",
+        ownerName: "testuser",
+        name: valid_benchmark.name,
+        description: valid_benchmark.description,
+        version: valid_benchmark.version,
+        itemCount: BigInt(valid_benchmark.items.length),
+        contentHash: "",
+      });
+
+      let res = await t.query(api.benchmark.getBenchmarks, {
+        version: valid_benchmark.version,
+      });
+      expect(res).toHaveLength(1);
+      expect(res[0]?._id).toBe(benchmarkId);
+
+      res = await t.query(api.benchmark.getBenchmarks, {
+        version: "this does not match anything",
+      });
+      expect(res).toHaveLength(0);
+    });
+  });
+
+  test("gets benchmark name, owner name, and version", async () => {
+    const t = convexTest(schema, modules);
+    await t.run(async (ctx) => {
+      const b = new Blob([JSON.stringify(valid_benchmark)], {
+        type: "application/json",
+      });
+      const sId = await ctx.storage.store(b);
+
+      const benchmarkId = await ctx.db.insert("benchmarks", {
+        storageId: sId,
+        ownerId: "testuser",
+        ownerName: "testuser",
+        name: valid_benchmark.name,
+        description: valid_benchmark.description,
+        version: valid_benchmark.version,
+        itemCount: BigInt(valid_benchmark.items.length),
+        contentHash: "",
+      });
+
+      const res = await t.query(api.benchmark.getBenchmarks, {
+        name: valid_benchmark.name,
+        ownerName: "testuser",
+        version: valid_benchmark.version,
+      });
+      expect(res).toHaveLength(1);
+      expect(res[0]?._id).toBe(benchmarkId);
+    });
   });
 });
