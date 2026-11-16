@@ -24,8 +24,6 @@
     "convex": "catalog:",
     "ox": "0.14.56",
     "viem": "^2.57.7",
-    "vite": "^8.3.8",
-    "vitest": "^5.1.0",
     "zod": "catalog:"
   },
   "devDependencies": {
@@ -33,6 +31,8 @@
     "@types/bun": "^1.4.4",
     "@types/node": "catalog:",
     "convex-test": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
   }
 }
