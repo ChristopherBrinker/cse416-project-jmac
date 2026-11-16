@@ -1775,13 +1775,14 @@ describe("getJobsForProvider", () => {
     });
   });
 
-  test("fails when secret is incorrect", async () => {
+  test("fails when secret is incorrect or provider does not exist", async () => {
     const t = convexTest(schema, modules);
+
+    const { fakeProviderId } = await generateFakeIds(t);
 
     let providerId: Id<"providers">;
     await t.run(async (ctx) => {
       const userId = "testuser";
-      const providerSecret = "1234";
       const price = 2500n;
 
       const b = new Blob([JSON.stringify(valid_benchmark)], {
@@ -1816,7 +1817,7 @@ describe("getJobsForProvider", () => {
 
       providerId = await ctx.db.insert("providers", {
         userId: "differentuser",
-        secret: providerSecret,
+        secret: "1234",
         walletAddress: "1234",
         approved: true,
         maxJobs: 10n,
@@ -1838,7 +1839,14 @@ describe("getJobsForProvider", () => {
         providerId,
         secret: "wrongsecret",
       });
-    }).rejects.toThrow();
+    }).rejects.toThrow("Invalid provider or secret");
+
+    await expect(async () => {
+      await t.query(api.job.getJobsForProvider, {
+        providerId: fakeProviderId,
+        secret: "1234",
+      });
+    }).rejects.toThrow("Invalid provider or secret");
   });
 });
 

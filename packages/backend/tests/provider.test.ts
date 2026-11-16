@@ -38,7 +38,11 @@ describe("addModelSupport", () => {
       expect(res.success).toBe(true);
 
       const ms = await ctx.db.query("model_support").first();
-      expect(ms).not.toBe(null);
+      expect(ms).toMatchObject({
+        modelId,
+        providerId,
+        available: false,
+      });
     });
   }, 15_000);
 

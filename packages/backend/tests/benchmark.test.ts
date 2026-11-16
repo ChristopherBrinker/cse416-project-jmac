@@ -374,7 +374,7 @@ describe("getBenchmarkFile", () => {
     expect(res.status).toBe(400);
   });
 
-  test("fails when provider was assigned job but job is finished", async () => {
+  test("fails when provider's assignment for this job is finished", async () => {
     const testData = await setupGetBenchmarkFile({
       jobAssignmentFinished: true,
     });

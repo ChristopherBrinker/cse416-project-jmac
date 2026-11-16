@@ -22,7 +22,6 @@
     "@convex-dev/better-auth": "^0.12.5",
     "better-auth": "1.6.15",
     "convex": "catalog:",
-    "convex-test": "catalog:",
     "ox": "0.14.56",
     "viem": "^2.57.7",
     "vite": "^8.3.8",
@@ -33,6 +32,7 @@
     "@cse416-project-jmac/config": "workspace:*",
     "@types/bun": "^1.4.4",
     "@types/node": "catalog:",
+    "convex-test": "catalog:",
     "typescript": "catalog:"
   }
 }
