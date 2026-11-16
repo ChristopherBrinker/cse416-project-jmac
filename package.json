@@ -7,20 +7,21 @@
       "packages/*"
     ],
     "catalog": {
-      "zod": "^4.5.4",
-      "typescript": "^6.0.3",
+      "@tailwindcss/postcss": "^4.3.3",
       "@types/node": "^26.4.1",
-      "varlock": "1.18.0",
+      "@types/react": "^19.2.18",
+      "@types/react-dom": "^19.2.7",
+      "convex": "^1.45.0",
+      "convex-test": "^0.0.71",
       "lucide-react": "^1.41.0",
       "next-themes": "^0.4.6",
       "react": "^19.2.8",
       "react-dom": "^19.2.8",
       "sonner": "^2.0.8",
-      "convex": "^1.45.0",
-      "@tailwindcss/postcss": "^4.3.3",
-      "@types/react": "^19.2.18",
-      "@types/react-dom": "^19.2.7",
-      "tailwindcss": "^4.3.3"
+      "tailwindcss": "^4.3.3",
+      "typescript": "^6.0.3",
+      "varlock": "1.18.0",
+      "zod": "^4.5.4"
     }
   },
   "type": "module",
@@ -42,6 +43,7 @@
     "hooks:install": "lefthook install"
   },
   "dependencies": {
+    "convex-test": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

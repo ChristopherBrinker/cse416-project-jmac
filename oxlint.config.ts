@@ -38,7 +38,7 @@ export default defineConfig({
     "prefer-destructuring": "off",
     "unicorn/prefer-response-static-json": "off",
     "typescript/no-explicit-any": "warn",
-    "typescript/no-non-null-assertion": "warn",
+    "typescript/no-non-null-assertion": "off",
     "no-alert": "off",
     "no-unused-vars": "warn",
     "no-await-in-loop": "warn",

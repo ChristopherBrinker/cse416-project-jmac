@@ -127,7 +127,7 @@ Run `bun install --frozen-lockfile` after pulling dependency changes. Git hooks 
 ```sh
 bun run check         # Lint and formatting checks
 bun run check-types   # TypeScript checks for web, UI, and backend
-bun run test          # Unit tests (web job lifecycle, backend wallet challenges)
+bun run test          # Unit tests (web job lifecycle, backend functions)
 bun run fix           # Apply Ultracite fixes and formatting
 ```
 

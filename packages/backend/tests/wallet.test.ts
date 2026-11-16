@@ -1,6 +1,5 @@
-import { describe, expect, test } from "bun:test";
-
 import { privateKeyToAccount } from "viem/accounts";
+import { describe, expect, test } from "vitest";
 
 import {
   buildChallengeMessage,
