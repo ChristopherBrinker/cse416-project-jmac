@@ -94,7 +94,7 @@ async function main() {
   const walletClient = createWalletClient({
     account,
     chain: foundry,
-    transport: http(),
+    transport: http(process.env.NET_URL),
   });
 
   const abiContents = await readFile("./abi.json", "utf-8");
