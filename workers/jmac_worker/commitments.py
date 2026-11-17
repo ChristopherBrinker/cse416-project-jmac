@@ -339,6 +339,10 @@ class CommitmentClient:
                     ),
                 }
             )
+            # Another provider can commit/reveal after estimation. Becoming the
+            # second provider also emits an event and may finalize the job, so
+            # reserve 50% headroom before signing the durable transaction bytes.
+            transaction["gas"] += (transaction["gas"] + 1) // 2
             signed = self.account.sign_transaction(transaction)
             raw = bytes(signed.raw_transaction)
             journal = {

@@ -128,6 +128,7 @@ Run `bun install --frozen-lockfile` after pulling dependency changes. Git hooks 
 bun run check         # Lint and formatting checks
 bun run check-types   # TypeScript checks for web, UI, and backend
 bun run test          # Unit tests (web job lifecycle, backend functions)
+bun run test:e2e      # Full evaluation pipeline (local services and real workers; setup below)
 bun run fix           # Apply Ultracite fixes and formatting
 ```
 
@@ -160,6 +161,8 @@ The dashboard checks Better Auth authentication on the server and waits for Conv
 ## CI and verification
 
 GitHub Actions uses Bun 1.4.0 and frozen installs to run lint, formatting, TypeScript checks, and unit tests. The `contracts` job runs `forge fmt --check`, `forge test`, the ABI drift check, and the Anvil settlement run (`contracts/script/e2e-settlement.sh`, uploaded as the `settlement-evidence` artifact). The `workers` job runs ruff and the full worker unittest suite. Settlement policy is in [docs/m4/protocol.md](docs/m4/protocol.md) and the acceptance matrix in [docs/m4/acceptance.md](docs/m4/acceptance.md). A separate build job requires repository Actions secrets `NEXT_PUBLIC_CONVEX_URL` and `NEXT_PUBLIC_CONVEX_SITE_URL`. A maintainer enables it with repository variable `INTEGRATION_BUILD_ENABLED=true`. The workflow does not deploy Convex.
+
+The separate evaluation E2E suite runs the real backend, scheduler, workers, and contract on disposable local services, including agreement, disagreement, and timeout/refund scenarios. Setup, scope, and diagnostics are in [the E2E guide](docs/testing/evaluation-e2e.md). It needs no team Convex credentials.
 
 Static checks run without account credentials. Production builds, deployment-aware Convex code generation, and live authentication checks require a configured Convex deployment and environment values.
 

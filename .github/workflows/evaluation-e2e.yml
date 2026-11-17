@@ -1,0 +1,51 @@
+name: Evaluation E2E
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/evaluation-e2e.yml
+      - packages/backend/**
+      - packages/scheduler/**
+      - contracts/**
+      - workers/**
+      - bun.lock
+      - package.json
+permissions:
+  contents: read
+concurrency:
+  group: evaluation-e2e-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  evaluation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - uses: foundry-rs/foundry-toolchain@v1
+      - uses: astral-sh/setup-uv@v6
+      - run: bun install --frozen-lockfile
+      - run: bash packages/scheduler/e2e/setup.sh
+      - run: uv sync --extra inference --extra provider --extra chain --locked
+        working-directory: workers
+      - uses: actions/cache@v4
+        id: model-cache
+        with:
+          path: workers/.cache/huggingface
+          key: evaluation-model-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('workers/jmac_worker/inference.py') }}
+      - name: Cache the pinned real model
+        if: steps.model-cache.outputs.cache-hit != 'true'
+        working-directory: workers
+        run: |
+          mkdir -p output
+          .venv/bin/python -m jmac_worker --benchmark examples/benchmark.json --model smollm2-135m --output output/e2e-warmup.json
+      - run: bun run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evaluation-e2e-evidence
+          path: .cache/e2e/run-*/evidence.json
+          include-hidden-files: true
+          if-no-files-found: ignore
