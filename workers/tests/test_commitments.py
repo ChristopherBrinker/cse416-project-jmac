@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from eth_account import Account
 from web3.exceptions import TransactionNotFound
@@ -187,6 +187,19 @@ class TransactionTests(unittest.TestCase):
         self.client._salt(
             self.path, json.loads(self.path.read_bytes())["assignment"], create=True
         )
+
+    def test_gas_margin_is_signed_before_journaling_for_concurrent_providers(self):
+        with patch.object(
+            self.client.account,
+            "sign_transaction",
+            wraps=self.client.account.sign_transaction,
+        ) as sign:
+            self.assertFalse(self.client.submit(self.path))
+        # Finalizing the other provider's commit can cost more than the estimate.
+        self.assertGreater(sign.call_args.args[0]["gas"], 150000)
+        journal = json.loads(self.path.with_suffix(".commit.json").read_bytes())
+        raw = bytes.fromhex(journal["raw_transaction"])
+        self.assertEqual(Account.recover_transaction(raw), ADDRESS)
 
     def test_signs_registered_wallet_and_persists_before_broadcast(self):
         journal_path = self.path.with_suffix(".commit.json")
