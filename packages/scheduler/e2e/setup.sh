@@ -11,6 +11,12 @@ case "$(uname -s)/$(uname -m)" in
   *) echo 'Unsupported platform; set E2E_CONVEX_BINARY to a compatible backend binary.' >&2; exit 1 ;;
 esac
 mkdir -p .cache/e2e/bin
+INSTALL_CHECKSUM=".cache/e2e/bin/convex-local-backend-$VERSION-$TARGET-$SHA256.sha256"
+if [ -x .cache/e2e/bin/convex-local-backend ] && [ -f "$INSTALL_CHECKSUM" ] && \
+  shasum -a 256 --check "$INSTALL_CHECKSUM" >/dev/null 2>&1; then
+  printf 'Convex backend %s already installed for %s.\n' "$VERSION" "$TARGET"
+  exit 0
+fi
 ARCHIVE=$(mktemp)
 trap 'rm -f "$ARCHIVE"' EXIT
 curl --fail --location --silent --show-error \
@@ -19,4 +25,5 @@ curl --fail --location --silent --show-error \
 printf '%s  %s\n' "$SHA256" "$ARCHIVE" | shasum -a 256 --check
 unzip -o "$ARCHIVE" convex-local-backend -d .cache/e2e/bin
 chmod +x .cache/e2e/bin/convex-local-backend
+shasum -a 256 .cache/e2e/bin/convex-local-backend > "$INSTALL_CHECKSUM"
 printf 'Convex backend %s installed. See docs/testing/evaluation-e2e.md for worker setup.\n' "$VERSION"
