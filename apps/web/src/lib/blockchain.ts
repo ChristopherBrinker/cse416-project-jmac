@@ -22,20 +22,24 @@ import type {
   Transport,
   WalletClient,
 } from "viem";
-import { foundry } from "viem/chains";
+import { foundry, sepolia } from "viem/chains";
 
 export const contractAddress = process.env
   .NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
 const rpcUrl = process.env.NEXT_PUBLIC_NET_URL ?? "http://127.0.0.1:8545";
 
 /**
- * The only supported network: a local Anvil chain (chain ID 31337) reached
- * through the configured RPC URL. Wallets use this definition when asked to
- * add or switch to the network.
+ * Wallets use this definition when asked to add or switch to the network.
  */
+if (
+  process.env.CHAIN !== undefined &&
+  !["foundry", "sepolia"].includes(process.env.CHAIN)
+) {
+  throw new Error("Invalid value for env CHAIN");
+}
 export const evaluationChain = defineChain({
-  ...foundry,
-  name: "JMAC Local (Anvil)",
+  ...(process.env.CHAIN === "sepolia" ? sepolia : foundry),
+  name: process.env.CHAIN === "sepolia" ? "JMAC Sepolia" : "JMAC Local (Anvil)",
   rpcUrls: { default: { http: [rpcUrl] } },
 });
 
