@@ -1,3 +1,4 @@
+import "./setup-test";
 import { privateKeyToAccount } from "viem/accounts";
 import { describe, expect, test } from "vitest";
 

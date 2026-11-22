@@ -12,7 +12,15 @@ import { getAddress, isAddress } from "viem";
  */
 
 export const WALLET_CHALLENGE_TTL_MS = 5 * 60 * 1000;
-export const SUPPORTED_CHAIN_ID = 31_337;
+const configuredChainId = process.env.CHAIN_ID;
+if (
+  !configuredChainId ||
+  !/^\d+$/u.test(configuredChainId) ||
+  !Number.isSafeInteger(Number(configuredChainId))
+) {
+  throw new Error("CHAIN_ID must be a decimal safe integer in convex");
+}
+export const SUPPORTED_CHAIN_ID = configuredChainId;
 const NONCE_BYTES = 16;
 const SIGNATURE_PATTERN = /^0x[\da-fA-F]{130}$/u;
 

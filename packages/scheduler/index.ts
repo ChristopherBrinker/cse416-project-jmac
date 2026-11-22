@@ -12,7 +12,7 @@ import {
   decodeEventLog,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { foundry } from "viem/chains";
+import { foundry, sepolia } from "viem/chains";
 
 import { specHash } from "./spec";
 
@@ -78,6 +78,12 @@ async function main() {
   if (!process.env.BACKEND_CONVEX_KEY) {
     throw new Error("Provide BACKEND_CONVEX_KEY");
   }
+  if (
+    process.env.CHAIN !== undefined &&
+    !["foundry", "sepolia"].includes(process.env.CHAIN)
+  ) {
+    throw new Error("Invalid value for env CHAIN");
+  }
 
   const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS as `0x${string}`;
 
@@ -85,7 +91,7 @@ async function main() {
   const BACKEND_CONVEX_KEY = process.env.BACKEND_CONVEX_KEY;
 
   const publicClient = createPublicClient({
-    chain: foundry,
+    chain: process.env.CHAIN === "sepolia" ? sepolia : foundry,
     transport: http(process.env.NET_URL),
   });
   const account = privateKeyToAccount(
@@ -93,7 +99,7 @@ async function main() {
   );
   const walletClient = createWalletClient({
     account,
-    chain: foundry,
+    chain: process.env.CHAIN === "sepolia" ? sepolia : foundry,
     transport: http(process.env.NET_URL),
   });
 
