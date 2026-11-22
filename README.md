@@ -64,7 +64,7 @@ In `apps/web/.env.local`, add:
 | `NEXT_PUBLIC_CONVEX_SITE_URL` | The same deployment's HTTP Actions URL (`https://<deployment>.convex.site`) |
 | `NEXT_PUBLIC_CONTRACT_ADDRESS` | Same as `CONTRACT_ADDRESS` in scheduler |
 | `NEXT_PUBLIC_NET_URL` | Same as `NET_URL` in scheduler |
-| `NEXT_PUBLIC_CHAIN` | Same as `CHAIN` in scheduler |
+| `NEXT_PUBLIC_CHAIN` | Same as `CHAIN` in scheduler. To use anvil, set to `foundry` or remove the variable from the file |
 
 Before continuing, set these values **on each Convex deployment** from `packages/backend`. Replace `$BACKEND_CONVEX_KEY` with the one you made for the scheduler, `$CHAIN_ID` with the chain id output by anvil (usually 31337), and `$CONTRACT_ADDRESS` with the address of the deployed contract:
 
