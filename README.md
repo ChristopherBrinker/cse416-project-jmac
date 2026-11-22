@@ -48,6 +48,7 @@ Next is to configure the enviornment variables for the scheduler. Go to `package
 | `NET_URL` | The url output by anvil as an http url (usually `http://127.0.0.1:8545`) |
 | `CONVEX_URL` | The cloud url of your Convex deployment |
 | `BACKEND_CONVEX_KEY` | Create a key (any string) that will be used to authenticate the scheduler with Convex |
+| `CHAIN` | Either `foundry` or `sepolia`. Omitting is the same as using `foundry`, and `foundry` should be used when using anvil as the blockchain net |
 
 Next is to configure the environment variables for the frontend. First run the following from the repository root:
 
@@ -63,6 +64,7 @@ In `apps/web/.env.local`, add:
 | `NEXT_PUBLIC_CONVEX_SITE_URL` | The same deployment's HTTP Actions URL (`https://<deployment>.convex.site`) |
 | `NEXT_PUBLIC_CONTRACT_ADDRESS` | Same as `CONTRACT_ADDRESS` in scheduler |
 | `NEXT_PUBLIC_NET_URL` | Same as `NET_URL` in scheduler |
+| `NEXT_PUBLIC_CHAIN` | Same as `CHAIN` in scheduler |
 
 Before continuing, set these values **on each Convex deployment** from `packages/backend`. Replace `$BACKEND_CONVEX_KEY` with the one you made for the scheduler, `$CHAIN_ID` with the chain id output by anvil (usually 31337), and `$CONTRACT_ADDRESS` with the address of the deployed contract:
 
